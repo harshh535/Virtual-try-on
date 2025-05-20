@@ -25,7 +25,8 @@ db = firebase.database()
 def run_virtual_tryon(cloth_path):
     """Runs the virtual try-on backend script."""
     try:
-        subprocess.run(["automated.py", cloth_path])
+        subprocess.run(["python", "automated.py", cloth_path])
+
         return True
     except Exception as e:
         st.error(f"⚠️ Error running virtual try-on: {e}")
