@@ -10,6 +10,12 @@ import numpy as np
 from pathlib import Path
 import subprocess
 
+import sys, subprocess
+print("▶︎ PYTHON VERSION:", sys.version)
+print("▶︎ pip freeze:")
+subprocess.run([sys.executable, "-m", "pip", "freeze"])
+
+
 def generate_cloth_mask(input_path, output_path):
     """
     Generates a binary cloth mask for a given clothing image.
