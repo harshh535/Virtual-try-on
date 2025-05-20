@@ -98,7 +98,7 @@ def show_dashboard():
         st.error("🔒 Please login through the main portal first")
         st.rerun()
 
-    with open('ma.jpg', 'rb') as img_file:
+    with open('shop_id.jpg', 'rb') as img_file:
         img_bytes = img_file.read()
         encoded_bg = base64.b64encode(img_bytes).decode()
 
@@ -177,9 +177,9 @@ def show_dashboard():
     # Input fields one per line
     item_name = st.text_input("Item Name")
     item_price = st.number_input("Price", min_value=0.0, format="%.2f")
-    item_color = st.selectbox("Color")
-    item_type = st.selectbox("Type")
-    item_length = st.selectbox("Length", ["Short", "Medium", "Long"])
+    item_color = st.text_input("Color")
+    item_type = st.text_input("Type")
+    item_length = st.text_input("Length")
     uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg", "jpeg"])
     
     if st.button("Upload Item", use_container_width=True):
