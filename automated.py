@@ -1,4 +1,5 @@
 # automated.py
+
 import os
 import sys
 import argparse
@@ -52,7 +53,7 @@ def generate_cloth_mask(input_path, output_path):
 
 def clear_results_folder(results_folder):
     """
-    Deletes everything inside results_folder (files & subfolders), 
+    Deletes everything inside results_folder (files & subfolders),
     so each run starts with an empty ./results/ directory.
     """
     if os.path.exists(results_folder):
@@ -74,7 +75,7 @@ def clear_results_folder(results_folder):
 
 def update_test_pairs(image_folder, test_pairs_file, cloth_name):
     """
-    Overwrites test_pairs.txt with lines: 
+    Overwrites test_pairs.txt with lines:
         <model_image> <cloth_name>
     for every model in datasets/test/image.
     """
@@ -99,16 +100,17 @@ def main(cloth_path):
     1. Clears ./results/
     2. Generates cloth-mask at datasets/test/cloth-mask/<cloth_name>
     3. Rewrites datasets/test_pairs.txt so <cloth_name> is paired to every file in datasets/test/image/
-    4. Calls `test.py --name virtual_tryon` using the same interpreter (sys.executable).
+    4. Calls `test.py --name virtual_tryon --dataset_dir ./datasets --dataset_list test_pairs.txt --save_dir ./results`
+       using the same interpreter (sys.executable).
     5. Leaves all outputs in ./results/, which shopkeeper_dashboard.py can then read and upload to Firebase.
     """
     # ─── Determine directories relative to this script ───
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    image_folder     = os.path.join(base_dir, "datasets", "test", "image")
+    image_folder      = os.path.join(base_dir, "datasets", "test", "image")
     cloth_mask_folder = os.path.join(base_dir, "datasets", "test", "cloth-mask")
-    test_pairs_file  = os.path.join(base_dir, "datasets", "test_pairs.txt")
-    results_folder   = os.path.join(base_dir, "results")
+    test_pairs_file   = os.path.join(base_dir, "datasets", "test_pairs.txt")
+    results_folder    = os.path.join(base_dir, "results")
 
     # 1) Ensure required folders exist
     os.makedirs(cloth_mask_folder, exist_ok=True)
@@ -132,18 +134,28 @@ def main(cloth_path):
     # 6) Update test_pairs.txt so that every model in image_folder is paired with cloth_name
     update_test_pairs(image_folder, test_pairs_file, cloth_name)
 
-    # 7) Run test.py (virtual try-on) with the same Python interpreter
-    print("🚀 Running `test.py --name virtual_tryon` …")
+    # 7) Run test.py (virtual try-on) with the same Python interpreter and correct flags
     test_py_path = os.path.join(base_dir, "test.py")
+    cmd = [
+        sys.executable,
+        test_py_path,
+        "--name", "virtual_tryon",
+        "--dataset_dir", os.path.join(base_dir, "datasets"),
+        "--dataset_list", "test_pairs.txt",
+        "--save_dir",    os.path.join(base_dir, "results")
+    ]
+    print("🚀 Running test.py with:", " ".join(cmd))
+
     try:
         completed = subprocess.run(
-            [sys.executable, test_py_path, "--name", "virtual_tryon"],
+            cmd,
             cwd=base_dir,
             check=True,
             capture_output=True,
             text=True
         )
-        print(completed.stdout)
+        if completed.stdout:
+            print(completed.stdout)
         if completed.stderr:
             print("⚠️ stderr from test.py:\n", completed.stderr)
     except subprocess.CalledProcessError as e:
