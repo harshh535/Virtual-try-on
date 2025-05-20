@@ -1,4 +1,5 @@
 # automated.py
+# automated.py
 
 import os
 import sys
@@ -99,7 +100,7 @@ def main(cloth_path):
     """
     1. Clears ./results/
     2. Generates cloth-mask at datasets/test/cloth-mask/<cloth_name>
-    3. Rewrites datasets/test_pairs.txt so <cloth_name> is paired to every file in datasets/test/image/
+    3. Rewrites datasets/test/test_pairs.txt so <cloth_name> is paired to every file in datasets/test/image/
     4. Calls `test.py --name virtual_tryon --dataset_dir ./datasets --dataset_list test_pairs.txt --save_dir ./results`
        using the same interpreter (sys.executable).
     5. Leaves all outputs in ./results/, which shopkeeper_dashboard.py can then read and upload to Firebase.
@@ -107,10 +108,11 @@ def main(cloth_path):
     # ─── Determine directories relative to this script ───
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    image_folder      = os.path.join(base_dir, "datasets", "test", "image")
-    cloth_mask_folder = os.path.join(base_dir, "datasets", "test", "cloth-mask")
-    test_pairs_file   = os.path.join(base_dir, "datasets", "test_pairs.txt")
-    results_folder    = os.path.join(base_dir, "results")
+    image_folder       = os.path.join(base_dir, "datasets", "test", "image")
+    cloth_mask_folder  = os.path.join(base_dir, "datasets", "test", "cloth-mask")
+    # NOTE: Write test_pairs.txt inside datasets/test/, not datasets/
+    test_pairs_file    = os.path.join(base_dir, "datasets", "test", "test_pairs.txt")
+    results_folder     = os.path.join(base_dir, "results")
 
     # 1) Ensure required folders exist
     os.makedirs(cloth_mask_folder, exist_ok=True)
@@ -125,13 +127,13 @@ def main(cloth_path):
         return
 
     # 4) Build the cloth-mask filename
-    cloth_name = Path(cloth_path).name
-    cloth_mask_path = os.path.join(cloth_mask_folder, cloth_name)
+    cloth_name       = Path(cloth_path).name
+    cloth_mask_path  = os.path.join(cloth_mask_folder, cloth_name)
 
     # 5) Generate the binary mask for this cloth
     generate_cloth_mask(cloth_path, cloth_mask_path)
 
-    # 6) Update test_pairs.txt so that every model in image_folder is paired with cloth_name
+    # 6) Update test_pairs.txt (inside datasets/test/) so that every model in image_folder is paired with cloth_name
     update_test_pairs(image_folder, test_pairs_file, cloth_name)
 
     # 7) Run test.py (virtual try-on) with the same Python interpreter and correct flags
