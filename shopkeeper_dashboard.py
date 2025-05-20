@@ -98,7 +98,7 @@ def show_dashboard():
         st.error("🔒 Please login through the main portal first")
         st.rerun()
 
-    with open('shop_id.jpg', 'rb') as img_file:
+    with open('ma.jpg', 'rb') as img_file:
         img_bytes = img_file.read()
         encoded_bg = base64.b64encode(img_bytes).decode()
 
