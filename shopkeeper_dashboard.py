@@ -25,7 +25,6 @@ db = firebase.database()
 def run_virtual_tryon(cloth_path):
     """Runs the virtual try-on backend script."""
     try:
-        venv_python = r"C:/Users/MSI/Desktop/clothes wala/Virtual-Try-On/venv/Scripts/python.exe"
         subprocess.run(["automated.py", cloth_path])
         return True
     except Exception as e:
