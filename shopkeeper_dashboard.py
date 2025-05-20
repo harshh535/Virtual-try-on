@@ -5,6 +5,8 @@ import os
 import subprocess
 import time
 from io import BytesIO
+import sys
+
 
 # ✅ Firebase Configuration
 firebase_config = {
