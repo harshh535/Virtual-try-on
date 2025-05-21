@@ -10,6 +10,7 @@ from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 
+
 # Google Drive checkpoint IDs
 SEG_CKPT_ID = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
 GMM_CKPT_ID = "1gtagvr1I8Dq4ejnpQ51fZ9G9sCloKgyh"
@@ -63,6 +64,21 @@ def load_models():
         grid_size=5
     )
 
+    # Make sure dataset_list is an absolute path
+    opt.dataset_list = os.path.join(opt.dataset_dir, opt.dataset_list)
+
+    # Check test_pairs.txt existence and content
+    if not os.path.exists(opt.dataset_list):
+        st.error(f"ERROR: Dataset list file not found at {opt.dataset_list}")
+    else:
+        with open(opt.dataset_list, 'r') as f:
+            lines = f.readlines()
+        st.info(f"Found {len(lines)} test pairs in {opt.dataset_list}")
+        st.write("Sample test pairs (first 5 lines):")
+        for line in lines[:5]:
+            st.write(line.strip())
+
+    # Initialize models
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
     opt.semantic_nc = 7
@@ -87,10 +103,15 @@ def run_inference(opt, seg, gmm, alias):
     test_dataset = VITONDataset(opt)
     test_loader = VITONDataLoader(opt, test_dataset)
 
+    total_batches = len(test_loader.data_loader)
+    st.info(f"Total batches to process: {total_batches}")
+
     with torch.no_grad():
         for i, inputs in enumerate(test_loader.data_loader):
             img_names = inputs['img_name']
             c_names = inputs['c_name']['unpaired']
+
+            st.write(f"Processing batch {i + 1}/{total_batches} - Image: {img_names[0]}, Cloth: {c_names[0]}")
 
             img_agnostic = inputs['img_agnostic']
             parse_agnostic = inputs['parse_agnostic']
@@ -147,9 +168,6 @@ def run_inference(opt, seg, gmm, alias):
                 unpaired_names.append(f'{img_name.split("_")[0]}_{c_name}')
 
             save_images(output, unpaired_names, RESULTS_DIR)
-
-            if (i + 1) % 1 == 0:
-                st.info(f"Processed {i + 1} batches.")
 
     st.success(f"Inference done! Results saved to {RESULTS_DIR}")
 
