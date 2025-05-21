@@ -4,9 +4,8 @@ import shutil
 import cv2
 import argparse
 import subprocess
+import numpy as np
 from pathlib import Path
-
-# ── STEP 1: Paths & Utilities ──────────────────────────────────────────
 
 def clear_results_folder(results_folder):
     """
@@ -73,14 +72,12 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
             fp.write(f"{model_fn} {cloth_name}\n")
 
 
-# ── STEP 2: MAIN ───────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(description="Automate cloth-mask → test_pairs.txt → test.py")
     parser.add_argument(
         "cloth_path",
         type=str,
-        help="Path to the uploaded cloth image (e.g. '/app/datasets/test/cloth/abc_shirt.jpg')"
+        help="Path to the uploaded cloth image (e.g. './datasets/test/cloth/my_shirt.jpg')"
     )
     args = parser.parse_args()
 
