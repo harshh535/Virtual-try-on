@@ -2,11 +2,11 @@ import streamlit as st
 import pyrebase
 import base64
 import os
-import subprocess
+import asyncio
 import time
 from io import BytesIO
 import sys
-
+import signal
 
 # ✅ Firebase Configuration
 firebase_config = {
@@ -24,70 +24,118 @@ firebase_config = {
 firebase = pyrebase.initialize_app(firebase_config)
 db = firebase.database()
 
-def run_virtual_tryon(cloth_path):
-    """Runs the virtual try-on backend script."""
+async def run_virtual_tryon(cloth_path):
+    """Run automated.py asynchronously with timeout handling"""
     try:
-        subprocess.run([sys.executable, "automated.py", cloth_path], check=True)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        automated_path = os.path.join(base_dir, "automated.py")
+        
+        # Create required directories
+        required_dirs = [
+            os.path.join(base_dir, "results"),
+            os.path.join(base_dir, "datasets", "test", "cloth"),
+            os.path.join(base_dir, "datasets", "test", "cloth-mask")
+        ]
+        for d in required_dirs:
+            os.makedirs(d, exist_ok=True)
 
-        return True
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, automated_path, cloth_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=base_dir
+        )
+        
+        # 15-minute timeout (Streamlit Cloud's limit)
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=900)
+            if process.returncode != 0:
+                st.error(f"❌ Try-on failed: {stderr.decode()}")
+                return False
+            return True
+        except asyncio.TimeoutError:
+            st.error("🕒 Process timed out after 15 minutes")
+            process.kill()
+            return False
+            
     except Exception as e:
-        st.error(f"⚠️ Error running virtual try-on: {e}")
+        st.error(f"🚨 Critical error: {str(e)}")
         return False
 
 def encode_image(image_path):
-    """Encodes an image to Base64 format."""
+    """Encodes an image to Base64 format with validation"""
     try:
+        if not os.path.exists(image_path):
+            st.error(f"⚠️ Image not found: {image_path}")
+            return None
+            
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
     except Exception as e:
-        st.error(f"⚠️ Error encoding image: {e}")
+        st.error(f"⚠️ Encoding failed: {e}")
         return None
 
 def upload_item(shop_no, item_name, item_price, item_desc, uploaded_image):
     if uploaded_image is not None:
         try:
-            item_id = f"item_{int(time.time())}"  # Unique ID for item
+            item_id = f"item_{int(time.time())}"
             item_path = f"Shops/{shop_no}/items/{item_id}/"
+            base_dir = os.path.dirname(os.path.abspath(__file__))
 
-            # Read image bytes once and store in variable
-            image_bytes = uploaded_image.read()
-            image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+            # Save image locally with unique name
+            cloth_folder = os.path.join(base_dir, "datasets", "test", "cloth")
+            os.makedirs(cloth_folder, exist_ok=True)
+            unique_name = f"{int(time.time())}_{uploaded_image.name}"
+            cloth_path = os.path.join(cloth_folder, unique_name)
+            
+            with open(cloth_path, "wb") as f:
+                f.write(uploaded_image.getbuffer())
 
-            # Save details to Firebase first (can update later with overlays)
+            # Save initial data to Firebase
             db.child(item_path).set({
                 "name": item_name,
                 "price": item_price,
                 "description": item_desc,
-                "original_image": image_base64
+                "original_image": base64.b64encode(uploaded_image.getvalue()).decode("utf-8")
             })
 
-            # Save image locally for processing with unique name
-            cloth_folder = "datasets/test/cloth/"
-            os.makedirs(cloth_folder, exist_ok=True)
-            unique_name = f"{int(time.time())}_{uploaded_image.name}"
-            cloth_path = os.path.join(cloth_folder, unique_name)
-            with open(cloth_path, "wb") as f:
-                f.write(image_bytes)
+            # Run try-on process
+            with st.spinner("🧪 Generating virtual try-ons (this may take 2-5 minutes)..."):
+                success = asyncio.run(run_virtual_tryon(cloth_path))
 
-            # Run virtual try-on process
-            if run_virtual_tryon(cloth_path):
-                results_folder = "results/"
-                overlayed_images = [os.path.join(results_folder, img) for img in os.listdir(results_folder) if img.endswith((".jpg", ".png"))]
+                if success:
+                    results_dir = os.path.join(base_dir, "results")
+                    overlayed_images = []
+                    if os.path.exists(results_dir):
+                        overlayed_images = [os.path.join(results_dir, f) 
+                                          for f in os.listdir(results_dir) 
+                                          if f.lower().endswith((".jpg", ".png"))]
 
-                if not overlayed_images:
-                    st.warning("⚠️ Virtual try-on ran but no images were generated.")
+                    if overlayed_images:
+                        updates = {}
+                        for i, img_path in enumerate(overlayed_images):
+                            if encoded := encode_image(img_path):
+                                updates[f"overlayed_{i}"] = encoded
+                            else:
+                                st.warning(f"⚠️ Failed to encode image: {os.path.basename(img_path)}")
+                        
+                        if updates:
+                            db.child(item_path).update(updates)
+                            st.success("✅ Item uploaded with try-on results!")
+                            st.balloons()
+                        else:
+                            st.error("⚠️ All try-on results failed to encode")
+                    else:
+                        st.warning("⚠️ Virtual try-on completed but no images generated")
                 else:
-                    overlayed_images_base64 = {f"overlayed_{i}": encode_image(img) for i, img in enumerate(overlayed_images)}
-                    db.child(item_path).update(overlayed_images_base64)
-                    st.success("✅ Item uploaded successfully with overlayed images!")
-            else:
-                st.error("⚠️ Failed to generate try-on images.")
+                    st.error("❌ Failed to process virtual try-on")
 
         except Exception as e:
-            st.error(f"⚠️ Error uploading item: {e}")
+            st.error(f"⚠️ Upload failed: {e}")
+            if os.path.exists(cloth_path):
+                os.remove(cloth_path)
     else:
-        st.error("⚠️ Please upload an image first.")
-
+        st.error("⚠️ Please upload an image first")
 
 def get_shop_items(shop_no):
     """Fetches all items of a shop from Firebase."""
