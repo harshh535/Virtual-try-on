@@ -1,4 +1,3 @@
-import argparse
 import os
 import torch
 from torch import nn
@@ -19,39 +18,35 @@ def download_if_not_exists(file_id, dest_path):
         gdown.download(url, dest_path, quiet=False)
 
 
+# Replace argparse with hardcoded options
+from types import SimpleNamespace
+
 def get_opt():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--name', type=str, required=True)
+    opt = SimpleNamespace()
 
-    parser.add_argument('-b', '--batch_size', type=int, default=1)
-    parser.add_argument('-j', '--workers', type=int, default=1)
-    parser.add_argument('--load_height', type=int, default=1024)
-    parser.add_argument('--load_width', type=int, default=768)
-    parser.add_argument('--shuffle', action='store_true')
+    opt.name = 'run1'
+    opt.batch_size = 1
+    opt.workers = 0
+    opt.load_height = 1024
+    opt.load_width = 768
+    opt.shuffle = False
+    opt.dataset_dir = './datasets/'
+    opt.dataset_mode = 'test'
+    opt.dataset_list = 'test_pairs.txt'
+    opt.checkpoint_dir = './checkpoints/'
+    opt.save_dir = './results/'
+    opt.display_freq = 1
+    opt.seg_checkpoint = 'seg_final.pth'
+    opt.gmm_checkpoint = 'gmm_final.pth'
+    opt.alias_checkpoint = 'alias_final.pth'
+    opt.semantic_nc = 13
+    opt.init_type = 'xavier'
+    opt.init_variance = 0.02
+    opt.grid_size = 5
+    opt.norm_G = 'spectralaliasinstance'
+    opt.ngf = 64
+    opt.num_upsampling_layers = 'most'
 
-    parser.add_argument('--dataset_dir', type=str, default='./datasets/')
-    parser.add_argument('--dataset_mode', type=str, default='test')
-    parser.add_argument('--dataset_list', type=str, default='test_pairs.txt')
-    parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints/')
-    parser.add_argument('--save_dir', type=str, default='./results/')
-
-    parser.add_argument('--display_freq', type=int, default=1)
-
-    parser.add_argument('--seg_checkpoint', type=str, default='seg_final.pth')
-    parser.add_argument('--gmm_checkpoint', type=str, default='gmm_final.pth')
-    parser.add_argument('--alias_checkpoint', type=str, default='alias_final.pth')
-
-    parser.add_argument('--semantic_nc', type=int, default=13)
-    parser.add_argument('--init_type', choices=['normal', 'xavier', 'xavier_uniform', 'kaiming', 'orthogonal', 'none'], default='xavier')
-    parser.add_argument('--init_variance', type=float, default=0.02)
-
-    parser.add_argument('--grid_size', type=int, default=5)
-
-    parser.add_argument('--norm_G', type=str, default='spectralaliasinstance')
-    parser.add_argument('--ngf', type=int, default=64)
-    parser.add_argument('--num_upsampling_layers', choices=['normal', 'more', 'most'], default='most')
-
-    opt = parser.parse_args()
     return opt
 
 
@@ -131,7 +126,7 @@ def test(opt, seg, gmm, alias):
 
 def main():
     opt = get_opt()
-    print(opt)
+    print("Options:", opt)
 
     os.makedirs(opt.save_dir, exist_ok=True)
     os.makedirs(opt.checkpoint_dir, exist_ok=True)
@@ -146,7 +141,7 @@ def main():
     gmm_ckpt_path = os.path.join(opt.checkpoint_dir, opt.gmm_checkpoint)
     alias_ckpt_path = os.path.join(opt.checkpoint_dir, opt.alias_checkpoint)
 
-    # Download from Google Drive if not exists
+    # Download checkpoints if missing
     download_if_not_exists(seg_ckpt_id, seg_ckpt_path)
     download_if_not_exists(gmm_ckpt_id, gmm_ckpt_path)
     download_if_not_exists(alias_ckpt_id, alias_ckpt_path)
