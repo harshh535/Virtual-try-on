@@ -16,7 +16,7 @@ def get_opt():
     parser.add_argument('--name', type=str, required=True)
 
     parser.add_argument('-b', '--batch_size', type=int, default=1)
-    parser.add_argument('-j', '--workers', type=int, default=1)
+    parser.add_argument('-j', '--workers', type=int, default=1)  # default 1, will override later
     parser.add_argument('--load_height', type=int, default=1024)
     parser.add_argument('--load_width', type=int, default=768)
     parser.add_argument('--shuffle', action='store_true')
@@ -53,11 +53,11 @@ def get_opt():
 
 
 def test(opt, seg, gmm, alias):
+    # Disable multiprocessing DataLoader workers to avoid shared memory issues
+    opt.workers = 0
+
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
     gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
-    
-    # Since we're not using CUDA, no need to move this to the GPU
-    # gauss.cuda()  # Removed because it's not needed in a CPU-only environment.
 
     test_dataset = VITONDataset(opt)
     test_loader = VITONDataLoader(opt, test_dataset)
@@ -67,11 +67,11 @@ def test(opt, seg, gmm, alias):
             img_names = inputs['img_name']
             c_names = inputs['c_name']['unpaired']
 
-            img_agnostic = inputs['img_agnostic']  # No .cuda() needed for CPU
-            parse_agnostic = inputs['parse_agnostic']  # No .cuda() needed for CPU
-            pose = inputs['pose']  # No .cuda() needed for CPU
-            c = inputs['cloth']['unpaired']  # No .cuda() needed for CPU
-            cm = inputs['cloth_mask']['unpaired']  # No .cuda() needed for CPU
+            img_agnostic = inputs['img_agnostic']
+            parse_agnostic = inputs['parse_agnostic']
+            pose = inputs['pose']
+            c = inputs['cloth']['unpaired']
+            cm = inputs['cloth_mask']['unpaired']
 
             # Part 1. Segmentation generation
             parse_agnostic_down = F.interpolate(parse_agnostic, size=(256, 192), mode='bilinear')
@@ -124,8 +124,7 @@ def test(opt, seg, gmm, alias):
             for img_name, c_name in zip(img_names, c_names):
                 unpaired_names.append('{}_{}'.format(img_name.split('_')[0], c_name))
 
-            save_images(output, unpaired_names, opt.save_dir)  # Save directly to results/
-
+            save_images(output, unpaired_names, opt.save_dir)
 
             if (i + 1) % opt.display_freq == 0:
                 print("step: {}".format(i + 1))
@@ -138,20 +137,16 @@ def main():
     if not os.path.exists(opt.save_dir):
        os.makedirs(opt.save_dir)
 
-
-    # No need to use .to(device) as all models will be used on the CPU
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
     opt.semantic_nc = 7
     alias = ALIASGenerator(opt, input_nc=9)
     opt.semantic_nc = 13
 
-    # Load model checkpoints (no .cuda() needed)
     load_checkpoint(seg, os.path.join(opt.checkpoint_dir, opt.seg_checkpoint))
     load_checkpoint(gmm, os.path.join(opt.checkpoint_dir, opt.gmm_checkpoint))
     load_checkpoint(alias, os.path.join(opt.checkpoint_dir, opt.alias_checkpoint))
 
-    # We no longer need to move models to CUDA since we're using the CPU.
     seg.eval()
     gmm.eval()
     alias.eval()
