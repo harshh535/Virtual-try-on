@@ -44,47 +44,50 @@ def encode_image(image_path):
         return None
 
 def upload_item(shop_no, item_name, item_price, item_desc, uploaded_image):
-    """Uploads item details and overlayed images to Firebase."""
     if uploaded_image is not None:
         try:
             item_id = f"item_{int(time.time())}"  # Unique ID for item
             item_path = f"Shops/{shop_no}/items/{item_id}/"
-            
-            # Convert uploaded image to Base64
+
+            # Read image bytes once and store in variable
             image_bytes = uploaded_image.read()
             image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-            
-            # Save details to Firebase
+
+            # Save details to Firebase first (can update later with overlays)
             db.child(item_path).set({
                 "name": item_name,
                 "price": item_price,
                 "description": item_desc,
                 "original_image": image_base64
             })
-            
-            # Save image locally for processing
+
+            # Save image locally for processing with unique name
             cloth_folder = "datasets/test/cloth/"
             os.makedirs(cloth_folder, exist_ok=True)
-            cloth_path = os.path.join(cloth_folder, uploaded_image.name)
+            unique_name = f"{int(time.time())}_{uploaded_image.name}"
+            cloth_path = os.path.join(cloth_folder, unique_name)
             with open(cloth_path, "wb") as f:
                 f.write(image_bytes)
-            
+
             # Run virtual try-on process
             if run_virtual_tryon(cloth_path):
-                # Upload overlayed images
                 results_folder = "results/"
-                if os.path.exists(results_folder):
-                    overlayed_images = [os.path.join(results_folder, img) for img in os.listdir(results_folder) if img.endswith((".jpg", ".png"))]
+                overlayed_images = [os.path.join(results_folder, img) for img in os.listdir(results_folder) if img.endswith((".jpg", ".png"))]
+
+                if not overlayed_images:
+                    st.warning("⚠️ Virtual try-on ran but no images were generated.")
+                else:
                     overlayed_images_base64 = {f"overlayed_{i}": encode_image(img) for i, img in enumerate(overlayed_images)}
                     db.child(item_path).update(overlayed_images_base64)
-                
-                st.success("✅ Item uploaded successfully with overlayed images!")
+                    st.success("✅ Item uploaded successfully with overlayed images!")
             else:
                 st.error("⚠️ Failed to generate try-on images.")
+
         except Exception as e:
             st.error(f"⚠️ Error uploading item: {e}")
     else:
         st.error("⚠️ Please upload an image first.")
+
 
 def get_shop_items(shop_no):
     """Fetches all items of a shop from Firebase."""
