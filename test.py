@@ -3,56 +3,70 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import torchgeometry as tgm
-
-import gdown  # For downloading from Google Drive
-
+import gdown
+import streamlit as st
+import threading
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 
+# Google Drive checkpoint IDs
+SEG_CKPT_ID = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
+GMM_CKPT_ID = "1gtagvr1I8Dq4ejnpQ51fZ9G9sCloKgyh"
+ALIAS_CKPT_ID = "1vWoDdaiWF0Zuv8Md9bn7q-xLUUIjXReY"
+
+CHECKPOINT_DIR = "./checkpoints"
+RESULTS_DIR = "./results"
 
 def download_if_not_exists(file_id, dest_path):
     if not os.path.exists(dest_path):
         url = f"https://drive.google.com/uc?id={file_id}"
-        print(f"Downloading {dest_path} from Google Drive...")
+        st.info(f"Downloading {os.path.basename(dest_path)} from Google Drive...")
         gdown.download(url, dest_path, quiet=False)
 
+@st.cache_resource(show_spinner=False)
+def load_models():
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# Replace argparse with hardcoded options
-from types import SimpleNamespace
+    seg_ckpt_path = os.path.join(CHECKPOINT_DIR, "seg_final.pth")
+    gmm_ckpt_path = os.path.join(CHECKPOINT_DIR, "gmm_final.pth")
+    alias_ckpt_path = os.path.join(CHECKPOINT_DIR, "alias_final.pth")
 
-def get_opt():
-    opt = SimpleNamespace()
+    download_if_not_exists(SEG_CKPT_ID, seg_ckpt_path)
+    download_if_not_exists(GMM_CKPT_ID, gmm_ckpt_path)
+    download_if_not_exists(ALIAS_CKPT_ID, alias_ckpt_path)
 
-    opt.name = 'run1'
-    opt.batch_size = 1
-    opt.workers = 0
-    opt.load_height = 1024
-    opt.load_width = 768
-    opt.shuffle = False
-    opt.dataset_dir = './datasets/'
-    opt.dataset_mode = 'test'
-    opt.dataset_list = 'test_pairs.txt'
-    opt.checkpoint_dir = './checkpoints/'
-    opt.save_dir = './results/'
-    opt.display_freq = 1
-    opt.seg_checkpoint = 'seg_final.pth'
-    opt.gmm_checkpoint = 'gmm_final.pth'
-    opt.alias_checkpoint = 'alias_final.pth'
+    # Prepare model options for loading (minimal options)
+    class Opt:
+        load_height = 1024
+        load_width = 768
+        semantic_nc = 13
+        init_type = 'xavier'
+        init_variance = 0.02
+        norm_G = 'spectralaliasinstance'
+        ngf = 64
+        num_upsampling_layers = 'most'
+
+    opt = Opt()
+
+    seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
+    gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
+    opt.semantic_nc = 7
+    alias = ALIASGenerator(opt, input_nc=9)
     opt.semantic_nc = 13
-    opt.init_type = 'xavier'
-    opt.init_variance = 0.02
-    opt.grid_size = 5
-    opt.norm_G = 'spectralaliasinstance'
-    opt.ngf = 64
-    opt.num_upsampling_layers = 'most'
 
-    return opt
+    load_checkpoint(seg, seg_ckpt_path)
+    load_checkpoint(gmm, gmm_ckpt_path)
+    load_checkpoint(alias, alias_ckpt_path)
 
+    seg.eval()
+    gmm.eval()
+    alias.eval()
 
-def test(opt, seg, gmm, alias):
-    opt.workers = 0
+    return seg, gmm, alias, opt
 
+def run_inference(opt, seg, gmm, alias):
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
     gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
 
@@ -118,51 +132,29 @@ def test(opt, seg, gmm, alias):
             for img_name, c_name in zip(img_names, c_names):
                 unpaired_names.append(f'{img_name.split("_")[0]}_{c_name}')
 
-            save_images(output, unpaired_names, opt.save_dir)
+            save_images(output, unpaired_names, RESULTS_DIR)
 
-            if (i + 1) % opt.display_freq == 0:
-                print(f"step: {i + 1}")
+            if (i + 1) % 1 == 0:
+                st.info(f"Processed {i + 1} batches.")
 
+    st.success(f"Inference done! Results saved to {RESULTS_DIR}")
 
 def main():
-    opt = get_opt()
-    print("Options:", opt)
+    st.title("Virtual Try-On Demo")
 
-    os.makedirs(opt.save_dir, exist_ok=True)
-    os.makedirs(opt.checkpoint_dir, exist_ok=True)
+    seg, gmm, alias, opt = load_models()
 
-    # Google Drive file IDs
-    seg_ckpt_id = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
-    gmm_ckpt_id = "1gtagvr1I8Dq4ejnpQ51fZ9G9sCloKgyh"
-    alias_ckpt_id = "1vWoDdaiWF0Zuv8Md9bn7q-xLUUIjXReY"
+    st.write("Upload your test dataset folder with the correct structure (see docs).")
 
-    # Local paths
-    seg_ckpt_path = os.path.join(opt.checkpoint_dir, opt.seg_checkpoint)
-    gmm_ckpt_path = os.path.join(opt.checkpoint_dir, opt.gmm_checkpoint)
-    alias_ckpt_path = os.path.join(opt.checkpoint_dir, opt.alias_checkpoint)
+    # You can extend this to take actual inputs for VITONDataset, 
+    # here I assume the dataset is prepared before running inference.
 
-    # Download checkpoints if missing
-    download_if_not_exists(seg_ckpt_id, seg_ckpt_path)
-    download_if_not_exists(gmm_ckpt_id, gmm_ckpt_path)
-    download_if_not_exists(alias_ckpt_id, alias_ckpt_path)
+    if st.button("Run Virtual Try-On Inference"):
+        with st.spinner("Running inference, please wait..."):
+            try:
+                run_inference(opt, seg, gmm, alias)
+            except Exception as e:
+                st.error(f"Error during inference: {e}")
 
-    # Load models
-    seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
-    gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
-    opt.semantic_nc = 7
-    alias = ALIASGenerator(opt, input_nc=9)
-    opt.semantic_nc = 13
-
-    load_checkpoint(seg, seg_ckpt_path)
-    load_checkpoint(gmm, gmm_ckpt_path)
-    load_checkpoint(alias, alias_ckpt_path)
-
-    seg.eval()
-    gmm.eval()
-    alias.eval()
-
-    test(opt, seg, gmm, alias)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
