@@ -15,7 +15,6 @@ def clear_results_folder(results_folder):
         shutil.rmtree(results_folder)
     os.makedirs(results_folder, exist_ok=True)
 
-
 def generate_cloth_mask(input_path, output_path):
     """
     Generates a binary cloth mask for a given clothing image.
@@ -41,7 +40,7 @@ def generate_cloth_mask(input_path, output_path):
     # Find contours
     contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # Create a proper single‐channel (uint8) mask of the same size as gray
+    # Create a proper single-channel uint8 mask of the same size as gray
     mask = np.zeros_like(gray, dtype=np.uint8)
 
     # Keep only contours with area > min_area
@@ -54,10 +53,9 @@ def generate_cloth_mask(input_path, output_path):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     cv2.imwrite(output_path, mask)
 
-
 def update_test_pairs(image_folder, test_pairs_file, cloth_name):
     """
-    Overwrites test_pairs.txt so every model in image_folder pairs with cloth_name.
+    Overwrites test_pairs.txt so every model in image_folder is paired with cloth_name.
     """
     if not os.path.exists(image_folder):
         raise FileNotFoundError(f"Model images folder not found: {image_folder}")
@@ -70,7 +68,6 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
     with open(test_pairs_file, "w") as fp:
         for model_fn in model_images:
             fp.write(f"{model_fn} {cloth_name}\n")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Automate cloth-mask → test_pairs.txt → test.py")
@@ -91,45 +88,52 @@ def main():
     test_pairs_file   = os.path.join(base_dir, "datasets", "test", "test_pairs.txt")
     results_folder    = os.path.join(base_dir, "results")
 
-    # 1) Clear any previous outputs
-    clear_results_folder(results_folder)
+    try:
+        # 1) Clear any previous outputs
+        clear_results_folder(results_folder)
 
-    # 2) Generate binary mask for the new cloth
-    os.makedirs(cloth_mask_folder, exist_ok=True)
-    mask_path = os.path.join(cloth_mask_folder, cloth_name)
-    generate_cloth_mask(cloth_path, mask_path)
+        # 2) Generate binary mask for the new cloth
+        os.makedirs(cloth_mask_folder, exist_ok=True)
+        mask_path = os.path.join(cloth_mask_folder, cloth_name)
+        generate_cloth_mask(cloth_path, mask_path)
 
-    # 3) Update test_pairs.txt so each model in datasets/test/image is paired with this cloth
-    update_test_pairs(image_folder, test_pairs_file, cloth_name)
+        # 3) Update test_pairs.txt so each model in datasets/test/image is paired with this cloth
+        update_test_pairs(image_folder, test_pairs_file, cloth_name)
 
-    # 4) Run test.py (CPU‐only) with the same Python interpreter
-    test_py = os.path.join(base_dir, "test.py")
-    cmd = [
-        sys.executable,
-        test_py,
-        "--name", "virtual_tryon",
-        "--dataset_dir", os.path.join(base_dir, "datasets"),
-        "--dataset_list", "test_pairs.txt",
-        "--save_dir", results_folder
-    ]
+        # 4) Run test.py (CPU-only) with the same Python interpreter
+        test_py = os.path.join(base_dir, "test.py")
+        cmd = [
+            sys.executable,
+            test_py,
+            "--name", "virtual_tryon",
+            "--dataset_dir", os.path.join(base_dir, "datasets"),
+            "--dataset_list", "test_pairs.txt",
+            "--save_dir", results_folder
+        ]
+        print(f"🚀 Running test.py with:\n    {' '.join(cmd)}\n")
 
-    completed = subprocess.run(cmd, cwd=base_dir, capture_output=True, text=True)
-    if completed.returncode != 0:
-        print("❌ test.py failed. stderr:\n", completed.stderr)
-        sys.exit(1)
+        completed = subprocess.run(cmd, cwd=base_dir, capture_output=True, text=True)
 
-    # 5) Report final contents of results/
-    if os.path.exists(results_folder):
-        saved = [fn for fn in os.listdir(results_folder) if os.path.isfile(os.path.join(results_folder, fn))]
-        if saved:
-            print(f"🎉 Inference complete. Found {len(saved)} files in 'results/':")
-            for fn in saved:
-                print("   -", fn)
+        if completed.returncode != 0:
+            print("❌ test.py failed. stdout:\n", completed.stdout)
+            print("❌ test.py failed. stderr:\n", completed.stderr)
+            sys.exit(1)
+
+        # 5) Report final contents of results/
+        if os.path.exists(results_folder):
+            saved = [fn for fn in os.listdir(results_folder) if os.path.isfile(os.path.join(results_folder, fn))]
+            if saved:
+                print(f"🎉 Inference complete. Found {len(saved)} files in 'results/':")
+                for fn in saved:
+                    print("   -", fn)
+            else:
+                print("⚠️ 'results/' folder is empty—no images generated.")
         else:
-            print("⚠️ 'results/' folder is empty—no images generated.")
-    else:
-        print("⚠️ 'results/' folder does not exist!")
+            print("⚠️ 'results/' folder does not exist!")
 
+    except Exception as e:
+        print(f"❌ Failed to process virtual try-on:\n    {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
