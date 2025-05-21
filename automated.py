@@ -46,7 +46,7 @@ def update_test_pairs():
 
 def run_inference():
     print("🚀 Starting test.py inference...")
-    subprocess.run(["python", "test.py"], check=True)
+    subprocess.run([sys.executable, "test.py"], check=True)
     print("✅ Inference completed")
 
 def main():
