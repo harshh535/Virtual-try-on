@@ -1,5 +1,4 @@
-# automated.py
-#import os
+import os
 import cv2
 import subprocess
 import shutil
