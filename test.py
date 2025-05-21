@@ -1,6 +1,3 @@
-# test.py
-
-import os
 import argparse
 import gdown
 import torch
