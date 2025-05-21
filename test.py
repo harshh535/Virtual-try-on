@@ -1,10 +1,9 @@
 import os
 import torch
-from torch import nn
-from torch.nn import functional as F
+import torch.nn as nn
+import torch.nn.functional as F
 import torchgeometry as tgm
 import gdown
-import streamlit as st
 from types import SimpleNamespace
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
@@ -18,16 +17,14 @@ ALIAS_CKPT_ID = "1vWoDdaiWF0Zuv8Md9bn7q-xLUUIjXReY"
 CHECKPOINT_DIR = "./checkpoints"
 RESULTS_DIR = "./results"
 
-
-def download_if_not_exists(file_id, dest_path):
+def download_checkpoint(file_id, dest_path):
     if not os.path.exists(dest_path):
         url = f"https://drive.google.com/uc?id={file_id}"
-        st.info(f"Downloading {os.path.basename(dest_path)} from Google Drive...")
+        print(f"Downloading {os.path.basename(dest_path)}...")
         gdown.download(url, dest_path, quiet=False)
 
-
-@st.cache_resource(show_spinner=False)
 def load_models():
+    """Load all required models without Streamlit dependencies"""
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -35,10 +32,12 @@ def load_models():
     gmm_ckpt_path = os.path.join(CHECKPOINT_DIR, "gmm_final.pth")
     alias_ckpt_path = os.path.join(CHECKPOINT_DIR, "alias_final.pth")
 
-    download_if_not_exists(SEG_CKPT_ID, seg_ckpt_path)
-    download_if_not_exists(GMM_CKPT_ID, gmm_ckpt_path)
-    download_if_not_exists(ALIAS_CKPT_ID, alias_ckpt_path)
+    # Download checkpoints if missing
+    download_checkpoint(SEG_CKPT_ID, seg_ckpt_path)
+    download_checkpoint(GMM_CKPT_ID, gmm_ckpt_path)
+    download_checkpoint(ALIAS_CKPT_ID, alias_ckpt_path)
 
+    # Configuration
     opt = SimpleNamespace(
         load_height=1024,
         load_width=768,
@@ -51,24 +50,22 @@ def load_models():
         batch_size=1,
         workers=0,
         shuffle=False,
-        dataset_dir='./datasets/',
+        dataset_dir=os.path.abspath("./datasets"),
         dataset_mode='test',
         dataset_list='test_pairs.txt',
         checkpoint_dir=CHECKPOINT_DIR,
         save_dir=RESULTS_DIR,
-        display_freq=1,
-        seg_checkpoint='seg_final.pth',
-        gmm_checkpoint='gmm_final.pth',
-        alias_checkpoint='alias_final.pth',
         grid_size=5
     )
 
+    # Initialize models
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
-    opt.semantic_nc = 7
+    opt.semantic_nc = 7  # Temporary change for ALIAS
     alias = ALIASGenerator(opt, input_nc=9)
-    opt.semantic_nc = 13
+    opt.semantic_nc = 13  # Reset
 
+    # Load weights
     load_checkpoint(seg, seg_ckpt_path)
     load_checkpoint(gmm, gmm_ckpt_path)
     load_checkpoint(alias, alias_ckpt_path)
@@ -79,73 +76,56 @@ def load_models():
 
     return seg, gmm, alias, opt
 
-
-def run_inference(opt, seg, gmm, alias):
+def run_inference():
+    """Core inference logic without any Streamlit components"""
+    seg, gmm, alias, opt = load_models()
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
     gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
 
-    # Step 1: Show test_pairs.txt content
-    st.subheader("📄 test_pairs.txt content")
-    test_pairs_path = os.path.join(opt.dataset_dir, opt.dataset_list)
-    try:
-        with open(test_pairs_path, "r") as f:
-            content = f.read()
-            st.code(content, language="text")
-    except Exception as e:
-        st.error(f"Could not read test_pairs.txt: {e}")
-        return
+    # Verify dataset paths
+    if not os.path.exists(os.path.join(opt.dataset_dir, "test", "image")):
+        raise FileNotFoundError(f"Missing model images in {opt.dataset_dir}/test/image")
 
     test_dataset = VITONDataset(opt)
     test_loader = VITONDataLoader(opt, test_dataset)
 
-    st.info(f"🧪 Loaded {len(test_dataset)} test pairs.")
-
     if len(test_dataset) == 0:
-        st.warning("⚠️ No test pairs found. Check test_pairs.txt and file paths.")
-        return
+        raise ValueError("No test pairs found in test_pairs.txt")
 
     with torch.no_grad():
         for i, inputs in enumerate(test_loader.data_loader):
-            st.write(f"🌀 Processing batch {i + 1}")
-            st.write("👕 Image Names:", inputs['img_name'])
-            st.write("👗 Cloth Names:", inputs['c_name']['unpaired'])
-
-            img_names = inputs['img_name']
-            c_names = inputs['c_name']['unpaired']
-
+            # ─── Processing Pipeline ──────────────────────────
             img_agnostic = inputs['img_agnostic']
             parse_agnostic = inputs['parse_agnostic']
             pose = inputs['pose']
             c = inputs['cloth']['unpaired']
             cm = inputs['cloth_mask']['unpaired']
 
+            # ─── Segmentation ─────────────────────────────────
             parse_agnostic_down = F.interpolate(parse_agnostic, size=(256, 192), mode='bilinear')
             pose_down = F.interpolate(pose, size=(256, 192), mode='bilinear')
             c_masked_down = F.interpolate(c * cm, size=(256, 192), mode='bilinear')
             cm_down = F.interpolate(cm, size=(256, 192), mode='bilinear')
             seg_input = torch.cat((cm_down, c_masked_down, parse_agnostic_down, pose_down, gen_noise(cm_down.size())), dim=1)
-
+            
             parse_pred_down = seg(seg_input)
             parse_pred = gauss(up(parse_pred_down))
             parse_pred = parse_pred.argmax(dim=1)[:, None]
 
+            # ─── Garment Warping ───────────────────────────────
             parse_old = torch.zeros(parse_pred.size(0), 13, opt.load_height, opt.load_width, dtype=torch.float)
             parse_old.scatter_(1, parse_pred, 1.0)
 
-            labels = {
-                0: ['background', [0]],
-                1: ['paste', [2, 4, 7, 8, 9, 10, 11]],
-                2: ['upper', [3]],
-                3: ['hair', [1]],
-                4: ['left_arm', [5]],
-                5: ['right_arm', [6]],
-                6: ['noise', [12]]
-            }
             parse = torch.zeros(parse_pred.size(0), 7, opt.load_height, opt.load_width, dtype=torch.float)
-            for j in range(len(labels)):
-                for label in labels[j][1]:
-                    parse[:, j] += parse_old[:, label]
+            parse[:, 0] = parse_old[:, 0]  # Background
+            parse[:, 1] = torch.sum(parse_old[:, [2,4,7,8,9,10,11]], dim=1)  # Paste regions
+            parse[:, 2] = parse_old[:, 3]  # Upper garment
+            parse[:, 3] = parse_old[:, 1]  # Hair
+            parse[:, 4] = parse_old[:, 5]  # Left arm
+            parse[:, 5] = parse_old[:, 6]  # Right arm
+            parse[:, 6] = parse_old[:, 12] # Noise
 
+            # ─── GMM Alignment ─────────────────────────────────
             agnostic_gmm = F.interpolate(img_agnostic, size=(256, 192), mode='nearest')
             parse_cloth_gmm = F.interpolate(parse[:, 2:3], size=(256, 192), mode='nearest')
             pose_gmm = F.interpolate(pose, size=(256, 192), mode='nearest')
@@ -156,6 +136,7 @@ def run_inference(opt, seg, gmm, alias):
             warped_c = F.grid_sample(c, warped_grid, padding_mode='border')
             warped_cm = F.grid_sample(cm, warped_grid, padding_mode='border')
 
+            # ─── Final Rendering ───────────────────────────────
             misalign_mask = parse[:, 2:3] - warped_cm
             misalign_mask[misalign_mask < 0.0] = 0.0
             parse_div = torch.cat((parse, misalign_mask), dim=1)
@@ -163,38 +144,20 @@ def run_inference(opt, seg, gmm, alias):
 
             output = alias(torch.cat((img_agnostic, pose, warped_c), dim=1), parse, parse_div, misalign_mask)
 
-            unpaired_names = []
-            for img_name, c_name in zip(img_names, c_names):
-                unpaired_names.append(f'{img_name.split("_")[0]}_{c_name}')
+            # ─── Save Results ──────────────────────────────────
+            img_names = inputs['img_name']
+            c_names = inputs['c_name']['unpaired']
+            unpaired_names = [f"{name.split('_')[0]}_{c_names[i]}" for i, name in enumerate(img_names)]
+            
+            save_images(output, unpaired_names, opt.save_dir)
+            print(f"Processed batch {i+1}/{len(test_loader)}")
 
-            save_images(output, unpaired_names, RESULTS_DIR)
-
-            st.success(f"✅ Saved batch {i + 1}")
-
-    # Confirm results
-    saved_files = os.listdir(RESULTS_DIR)
-    if saved_files:
-        st.success(f"🎉 Output generated: {len(saved_files)} files.")
-        for f in saved_files:
-            if f.lower().endswith((".png", ".jpg", ".jpeg")):
-                st.image(os.path.join(RESULTS_DIR, f), width=300)
-    else:
-        st.warning("⚠️ 'results/' folder is empty! No output files found.")
-
-
-def main():
-    st.title("👚 Virtual Try-On Inference")
-    seg, gmm, alias, opt = load_models()
-
-    st.write("Ensure the dataset and test_pairs.txt are in place before running.")
-
-    if st.button("🚀 Run Virtual Try-On"):
-        with st.spinner("Running inference, please wait..."):
-            try:
-                run_inference(opt, seg, gmm, alias)
-            except Exception as e:
-                st.error(f"❌ Error during inference: {e}")
-
+    print(f"Inference complete. Results saved to {opt.save_dir}")
 
 if __name__ == "__main__":
-    main()
+    # Run directly when called by automated.py
+    try:
+        run_inference()
+    except Exception as e:
+        print(f"❌ Critical error: {str(e)}")
+        exit(1)
