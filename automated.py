@@ -174,6 +174,22 @@ def main(cloth_path):
 
     print("✅ Virtual try-on pipeline complete. Check → results/ for output images.")
 
+        # After test.py completes:
+    
+
+    # --- NEW: Check if results folder has any files ---
+    if os.path.exists(results_folder):
+        files = [f for f in os.listdir(results_folder) if os.path.isfile(os.path.join(results_folder, f))]
+        if files:
+            print(f"🎉 Found {len(files)} file(s) in 'results/':")
+            for f in files:
+                print("   -", f)
+        else:
+            print("⚠️ 'results/' folder is empty! No output files found.")
+    else:
+        print("⚠️ 'results/' folder does not exist!")
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automate cloth-mask → test_pairs.txt → test.py")
