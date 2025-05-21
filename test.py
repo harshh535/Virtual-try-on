@@ -5,7 +5,7 @@ from torch.nn import functional as F
 import torchgeometry as tgm
 import gdown
 import streamlit as st
-import threading
+from types import SimpleNamespace
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
@@ -18,11 +18,13 @@ ALIAS_CKPT_ID = "1vWoDdaiWF0Zuv8Md9bn7q-xLUUIjXReY"
 CHECKPOINT_DIR = "./checkpoints"
 RESULTS_DIR = "./results"
 
+
 def download_if_not_exists(file_id, dest_path):
     if not os.path.exists(dest_path):
         url = f"https://drive.google.com/uc?id={file_id}"
         st.info(f"Downloading {os.path.basename(dest_path)} from Google Drive...")
         gdown.download(url, dest_path, quiet=False)
+
 
 @st.cache_resource(show_spinner=False)
 def load_models():
@@ -37,18 +39,29 @@ def load_models():
     download_if_not_exists(GMM_CKPT_ID, gmm_ckpt_path)
     download_if_not_exists(ALIAS_CKPT_ID, alias_ckpt_path)
 
-    # Prepare model options for loading (minimal options)
-    class Opt:
-        load_height = 1024
-        load_width = 768
-        semantic_nc = 13
-        init_type = 'xavier'
-        init_variance = 0.02
-        norm_G = 'spectralaliasinstance'
-        ngf = 64
-        num_upsampling_layers = 'most'
-
-    opt = Opt()
+    opt = SimpleNamespace(
+        load_height=1024,
+        load_width=768,
+        semantic_nc=13,
+        init_type='xavier',
+        init_variance=0.02,
+        norm_G='spectralaliasinstance',
+        ngf=64,
+        num_upsampling_layers='most',
+        batch_size=1,
+        workers=0,
+        shuffle=False,
+        dataset_dir='./datasets/',
+        dataset_mode='test',
+        dataset_list='test_pairs.txt',
+        checkpoint_dir=CHECKPOINT_DIR,
+        save_dir=RESULTS_DIR,
+        display_freq=1,
+        seg_checkpoint='seg_final.pth',
+        gmm_checkpoint='gmm_final.pth',
+        alias_checkpoint='alias_final.pth',
+        grid_size=5
+    )
 
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
@@ -65,6 +78,7 @@ def load_models():
     alias.eval()
 
     return seg, gmm, alias, opt
+
 
 def run_inference(opt, seg, gmm, alias):
     up = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
@@ -139,15 +153,12 @@ def run_inference(opt, seg, gmm, alias):
 
     st.success(f"Inference done! Results saved to {RESULTS_DIR}")
 
+
 def main():
     st.title("Virtual Try-On Demo")
-
     seg, gmm, alias, opt = load_models()
 
     st.write("Upload your test dataset folder with the correct structure (see docs).")
-
-    # You can extend this to take actual inputs for VITONDataset, 
-    # here I assume the dataset is prepared before running inference.
 
     if st.button("Run Virtual Try-On Inference"):
         with st.spinner("Running inference, please wait..."):
@@ -155,6 +166,7 @@ def main():
                 run_inference(opt, seg, gmm, alias)
             except Exception as e:
                 st.error(f"Error during inference: {e}")
+
 
 if __name__ == "__main__":
     main()
