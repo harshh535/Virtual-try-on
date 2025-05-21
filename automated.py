@@ -46,8 +46,23 @@ def update_test_pairs():
 
 def run_inference():
     print("🚀 Starting test.py inference...")
-    subprocess.run([sys.executable, "test.py"], check=True)
-    print("✅ Inference completed")
+
+    try:
+        completed = subprocess.run(
+            [sys.executable, "test.py"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        print("✅ Inference completed")
+        print("Output:\n", completed.stdout)
+    except subprocess.CalledProcessError as e:
+        print("❌ Try-on failed:")
+        print("Return code:", e.returncode)
+        print("Output:\n", e.output)
+        print("Error output:\n", e.stderr)
+        raise
 
 def main():
     clear_results()
