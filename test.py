@@ -91,18 +91,17 @@ def get_opt():
         default=1,
         help="batch size for DataLoader (default: 1)"
     )
-    # Default workers=0 to avoid shared memory errors in limited environments
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=0,
-        help="number of worker threads for DataLoader (default: 0)"
+        default=4,
+        help="number of worker threads for DataLoader (default: 4)"
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=0,
-        help="alias for --num_workers; used by VITONDataLoader (default: 0)"
+        default=4,
+        help="alias for --num_workers; used by VITONDataLoader"
     )
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -131,8 +130,11 @@ def load_models(opt):
     download_if_not_exists(ALIAS_CKPT_ID, alias_path)
 
     # Construct networks
+    # SegGenerator
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
+    # GMM
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
+    # ALIASGenerator: temporarily set semantic_nc to 7 for alias step
     prev_sem = opt.semantic_nc
     opt.semantic_nc = 7
     alias = ALIASGenerator(opt, input_nc=9)
@@ -175,8 +177,8 @@ def run_inference(opt, seg, gmm, alias):
         print("    " + ln)
 
     # 2) Build dataset & dataloader
-    test_dataset = VITONDataset(opt)
-    test_loader  = VITONDataLoader(opt, test_dataset)
+    test_dataset = VITONDataset(opt)                     # uses opt.dataset_dir and opt.dataset_mode
+    test_loader  = VITONDataLoader(opt, test_dataset)    # uses opt.shuffle, opt.batch_size, opt.workers
 
     print(f"🧪 Loaded {len(test_dataset)} test pairs (dataset length).")
     if len(test_dataset) == 0:
@@ -276,15 +278,9 @@ def run_inference(opt, seg, gmm, alias):
 def main():
     opt = get_opt()
     os.makedirs(opt.save_dir, exist_ok=True)
-
     # Ensure both num_workers and workers are set consistently
     if not hasattr(opt, 'workers'):
         opt.workers = opt.num_workers
-
-    # Override to zero if running into shared memory errors
-    opt.num_workers = 0
-    opt.workers     = 0
-
     seg, gmm, alias = load_models(opt)
     run_inference(opt, seg, gmm, alias)
 
