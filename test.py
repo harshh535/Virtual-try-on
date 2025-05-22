@@ -94,13 +94,13 @@ def get_opt():
     parser.add_argument(
         "--num_workers",
         type=int,
-        default=4,
+        default=2,
         help="number of worker threads for DataLoader (default: 4)"
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
+        default=2,
         help="alias for --num_workers; used by VITONDataLoader"
     )
     # ──────────────────────────────────────────────────────────────────────────
