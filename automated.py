@@ -3,12 +3,10 @@ import shutil
 import cv2
 import numpy as np
 from pathlib import Path
-import json
-import argparse
-
-# Instead of relying on test.get_opt(), we’ll build our own Namespace
 import types
-import test  # Import the revised `test.py` module
+
+# Import your test.py so we can call its functions directly
+import test
 
 def generate_cloth_mask(input_path, output_path):
     """
@@ -72,14 +70,14 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
 
 def main(cloth_path):
     """
-    Replaces subprocess invocation with direct function calls to test.py.
+    Runs the entire virtual try-on pipeline in-process (no subprocess calls).
     Steps:
-      1) Create/verify directories.
-      2) Clear any previous results.
-      3) Copy the uploaded cloth image into datasets/test/cloth.
-      4) Generate its mask under datasets/test/cloth-mask.
+      1) Ensure directories exist.
+      2) Clear previous results.
+      3) Copy cloth into datasets/test/cloth.
+      4) Generate cloth mask.
       5) Update test_pairs.txt.
-      6) Build a Namespace 'opt' and call test.load_models(opt), test.run_inference(opt, ...).
+      6) Build `opt` namespace and call test.load_models(opt) & test.run_inference(opt, ...).
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     print("STEP 1: Starting automated pipeline")
@@ -109,7 +107,7 @@ def main(cloth_path):
         return
     print(f"✅ Found model-image folder → {image_folder}")
 
-    # 4) Copy uploaded cloth into datasets/test/cloth/, only if it’s not already there
+    # 4) Copy uploaded cloth into datasets/test/cloth/, only if not already there
     print("STEP 4: Copying uploaded cloth image")
     cloth_name      = Path(cloth_path).name
     cloth_dest_path = os.path.join(cloth_folder, cloth_name)
@@ -123,7 +121,7 @@ def main(cloth_path):
     cloth_mask_path = os.path.join(cloth_mask_folder, cloth_name)
     generate_cloth_mask(cloth_dest_path, cloth_mask_path)
 
-    # 6) Debug: show contents of image_folder
+    # 6) Debug: show contents of image-folder
     print("STEP 6: Listing contents of image-folder")
     print(f"📂 Checking image-folder: {image_folder}")
     print(f"✅ Exists? {os.path.exists(image_folder)}")
@@ -132,7 +130,7 @@ def main(cloth_path):
     # 7) Update test_pairs.txt
     update_test_pairs(image_folder, test_pairs_file, cloth_name)
 
-    # 8) Print test_pairs.txt contents for debugging
+    # 8) Print test_pairs.txt contents for verification
     print("STEP 8: Printing test_pairs.txt contents for verification")
     with open(test_pairs_file, "r") as f:
         for line in f:
@@ -141,26 +139,25 @@ def main(cloth_path):
     # 9) Build a fresh `opt` namespace—no CLI parsing!
     print("STEP 9: Running inference via direct function calls")
 
-    # Create an empty Namespace and manually set attributes:
     opt = types.SimpleNamespace()
-
-    # Required by load_models() and run_inference():
-    opt.name           = "virtual_tryon"
-    opt.dataset_dir    = "datasets"
-    opt.dataset_mode   = "test"
-    opt.dataset_list   = "test/test_pairs.txt"
-    opt.save_dir       = "results"
-    opt.checkpoint_dir = "checkpoints"
-    opt.load_height    = 1024
-    opt.load_width     = 768
-    opt.semantic_nc    = 13
-    opt.grid_size      = 5
-    opt.norm_G         = "spectralaliasinstance"
-    opt.ngf            = 64
+    # Required by SegGenerator, GMM, ALIASGenerator, etc.
+    opt.init_type             = "normal"
+    opt.init_variance         = 0.02
+    opt.name                  = "virtual_tryon"
+    opt.dataset_dir           = "datasets"
+    opt.dataset_mode          = "test"
+    opt.dataset_list          = "test/test_pairs.txt"
+    opt.save_dir              = "results"
+    opt.checkpoint_dir        = "checkpoints"
+    opt.load_height           = 1024
+    opt.load_width            = 768
+    opt.semantic_nc           = 13
+    opt.grid_size             = 5
+    opt.norm_G                = "spectralaliasinstance"
+    opt.ngf                   = 64
     opt.num_upsampling_layers = "most"
-    opt.display_freq   = 1
-
-    # DataLoader arguments:
+    opt.display_freq          = 1
+    # DataLoader-specific
     opt.shuffle     = False
     opt.batch_size  = 1
     opt.num_workers = 0
@@ -195,6 +192,7 @@ def main(cloth_path):
     print("STEP 11: Automated pipeline finished.")
 
 if __name__ == "__main__":
+    import argparse
     parser = argparse.ArgumentParser(
         description="Automate: generate cloth-mask → update test_pairs.txt → run inference"
     )
