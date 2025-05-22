@@ -35,9 +35,9 @@ def download_if_not_exists(file_id, dest_path):
 def get_opt():
     """
     Builds an argparse.Namespace containing all options needed by load_models() 
-    and run_inference(). If running from the command line, this will parse CLI 
-    arguments. If imported (e.g. by automated.py), you can override attributes 
-    manually after calling get_opt().
+    and run_inference().  
+    When invoked as a script, this parses CLI arguments; when imported, you may 
+    override attributes manually.
     """
     parser = argparse.ArgumentParser(description="Test Virtual Try-On")
 
@@ -97,7 +97,6 @@ def get_opt():
         default=1,
         help="batch size for DataLoader (default: 1)"
     )
-    # We recommend num_workers=0 on environments with limited shared memory
     parser.add_argument(
         "--num_workers",
         type=int,
@@ -282,9 +281,11 @@ def run_inference(opt, seg, gmm, alias):
 def main():
     opt = get_opt()
     os.makedirs(opt.save_dir, exist_ok=True)
+
     # Make sure both attributes exist
     if not hasattr(opt, 'workers'):
         opt.workers = opt.num_workers
+
     seg, gmm, alias = load_models(opt)
     run_inference(opt, seg, gmm, alias)
 
