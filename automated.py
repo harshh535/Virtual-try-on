@@ -146,7 +146,6 @@ def main(cloth_path):
         stderr=subprocess.PIPE,
         text=True
     )
-    st.write("success")
     if proc.stdout:
         print(f"--- test.py STDOUT ---\n{proc.stdout}")
     if proc.stderr:
