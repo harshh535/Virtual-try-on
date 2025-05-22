@@ -10,6 +10,8 @@ from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 
+# Add to very top of test.py:
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 # ─── Google Drive IDs ─────────────────────────────────────────────────────────
 SEG_CKPT_ID   = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
 GMM_CKPT_ID   = "1gtagvr1I8Dq4ejnpQ51fZ9G9sCloKgyh"
