@@ -1,5 +1,5 @@
 [server]
-maxUploadSize = 200  # Max image size (MB)
+maxUploadSize = 800  # Max image size (MB)
 headless = true  # Disable GUI for stability
 
 [runner]
