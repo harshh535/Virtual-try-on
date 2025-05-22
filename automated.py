@@ -6,12 +6,14 @@ import cv2
 import numpy as np
 from pathlib import Path
 import subprocess
+import json
 
 def generate_cloth_mask(input_path, output_path):
     """
     Generates a binary cloth mask for a given clothing image.
     Saves the mask (PNG) at output_path.
     """
+    print("STEP 5: Generating cloth mask")
     if not os.path.exists(input_path):
         print(f"❌ Error: File not found → {input_path}")
         return
@@ -41,6 +43,7 @@ def clear_folder(folder_path):
     """
     Deletes and recreates `folder_path` so it’s empty.
     """
+    print(f"STEP 2: Clearing folder → {folder_path}")
     if os.path.exists(folder_path):
         shutil.rmtree(folder_path)
     os.makedirs(folder_path, exist_ok=True)
@@ -50,6 +53,7 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
     """
     Overwrites test_pairs.txt so that every model in `image_folder` is paired with `cloth_name`.
     """
+    print("STEP 7: Updating test_pairs.txt")
     if not os.path.exists(image_folder):
         print(f"❌ ERROR: Model-image folder missing → {image_folder}")
         return
@@ -66,6 +70,9 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
 
 def main(cloth_path):
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    print("STEP 1: Starting automated pipeline")
+    print(f"→ Base directory: {base_dir}")
+    print(f"→ Received cloth_path: {cloth_path}")
 
     # 1) Folders & paths
     image_folder      = os.path.join(base_dir, "datasets", "test", "image")
@@ -74,19 +81,24 @@ def main(cloth_path):
     test_pairs_file   = os.path.join(base_dir, "datasets", "test", "test_pairs.txt")
     results_folder    = os.path.join(base_dir, "results")
 
+    print("STEP 1.1: Ensuring required directories exist")
     os.makedirs(cloth_folder, exist_ok=True)
     os.makedirs(cloth_mask_folder, exist_ok=True)
     os.makedirs(results_folder, exist_ok=True)
+    print(f"→ Created/Verified:\n   • {cloth_folder}\n   • {cloth_mask_folder}\n   • {results_folder}")
 
     # 2) Clear out any previous results
     clear_folder(results_folder)
 
     # 3) Check for model-image folder
+    print("STEP 3: Checking for model-image folder")
     if not os.path.exists(image_folder):
         print(f"❌ ERROR: Cannot find model-image folder → {image_folder}")
         return
+    print(f"✅ Found model-image folder → {image_folder}")
 
     # 4) Copy uploaded cloth into datasets/test/cloth/, only if it’s not already there
+    print("STEP 4: Copying uploaded cloth image")
     cloth_name      = Path(cloth_path).name
     cloth_dest_path = os.path.join(cloth_folder, cloth_name)
     if os.path.abspath(cloth_path) != os.path.abspath(cloth_dest_path):
@@ -100,6 +112,7 @@ def main(cloth_path):
     generate_cloth_mask(cloth_dest_path, cloth_mask_path)
 
     # 6) Debug: show contents of image_folder
+    print("STEP 6: Listing contents of image-folder")
     print(f"📂 Checking image-folder: {image_folder}")
     print(f"✅ Exists? {os.path.exists(image_folder)}")
     print(f"📜 Contents: {os.listdir(image_folder)}")
@@ -108,12 +121,13 @@ def main(cloth_path):
     update_test_pairs(image_folder, test_pairs_file, cloth_name)
 
     # 8) Print test_pairs.txt contents for debugging
-    print("📄 test_pairs.txt now contains:")
+    print("STEP 8: Printing test_pairs.txt contents for verification")
     with open(test_pairs_file, "r") as f:
         for line in f:
             print("   " + line.strip())
 
     # 9) Run test.py
+    print("STEP 9: Running test.py inference")
     test_py_path = os.path.join(base_dir, "test.py")
     cmd = [
         sys.executable,
@@ -133,16 +147,17 @@ def main(cloth_path):
         text=True
     )
     if proc.stdout:
-        print(proc.stdout)
+        print(f"--- test.py STDOUT ---\n{proc.stdout}")
     if proc.stderr:
         print(f"⚠️ stderr from test.py:\n{proc.stderr}")
 
     if proc.returncode != 0:
         print("❌ test.py failed with exit code", proc.returncode)
         return
+    print("✅ test.py completed successfully")
 
     # 10) List whatever ended up in results/
-    print("✅ Virtual try-on pipeline complete. Now checking `results/` folder...")
+    print("STEP 10: Verifying results/")
     saved = []
     for fname in os.listdir(results_folder):
         if fname.lower().endswith((".jpg", ".png")):
@@ -153,6 +168,8 @@ def main(cloth_path):
             print("   -", f)
     else:
         print("⚠️ 'results/' folder is empty! No output files found.")
+
+    print("STEP 11: Automated pipeline finished.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
