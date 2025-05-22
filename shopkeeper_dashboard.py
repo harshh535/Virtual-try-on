@@ -30,6 +30,7 @@ def run_virtual_tryon(cloth_path):
     """
     Runs the virtual try-on backend script using the same Python interpreter
     as Streamlit. Assumes 'automated.py' lives alongside this file.
+    Captures stdout/stderr and displays it in the Streamlit UI.
     """
     try:
         script_path = os.path.join(base_dir, "automated.py")
@@ -38,6 +39,7 @@ def run_virtual_tryon(cloth_path):
             script_path,
             cloth_path
         ]
+        st.text(f"▶️ Running automated.py with command:\n   {' '.join(cmd)}\n")
         proc = subprocess.run(
             cmd,
             cwd=base_dir,
@@ -45,9 +47,18 @@ def run_virtual_tryon(cloth_path):
             stderr=subprocess.PIPE,
             text=True
         )
+        if proc.stdout:
+            st.text("=== automated.py STDOUT ===")
+            st.code(proc.stdout)
+        if proc.stderr:
+            st.text("=== automated.py STDERR ===")
+            st.code(proc.stderr)
+
         if proc.returncode != 0:
-            st.error(f"⚠️ automated.py failed (exit code {proc.returncode}):\n{proc.stderr}")
+            st.error(f"❌ automated.py failed (exit code {proc.returncode}).")
             return False
+
+        st.success("✅ automated.py completed successfully.")
         return True
     except Exception as e:
         st.error(f"⚠️ Error running virtual try-on: {e}")
