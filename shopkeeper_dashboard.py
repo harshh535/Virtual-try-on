@@ -307,7 +307,7 @@ def show_dashboard():
                     try:
                         db.child(f"Shops/{st.session_state.shop_no}/items/{item_id}").remove()
                         st.success(f"✅ {item_data.get('name', 'Item')} deleted successfully!")
-                        st.experimental_rerun()
+                        st.rerun()
                     except Exception as e:
                         st.error(f"⚠️ Error deleting item: {e}")
     else:
