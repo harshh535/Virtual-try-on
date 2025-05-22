@@ -39,7 +39,7 @@ def generate_cloth_mask(input_path, output_path):
 
 def clear_folder(folder_path):
     """
-    Deletes and recreates `folder_path` so it's empty.
+    Deletes and recreates `folder_path` so it’s empty.
     """
     if os.path.exists(folder_path):
         shutil.rmtree(folder_path)
@@ -86,11 +86,14 @@ def main(cloth_path):
         print(f"❌ ERROR: Cannot find model-image folder → {image_folder}")
         return
 
-    # 4) Save uploaded cloth inside datasets/test/cloth/
+    # 4) Copy uploaded cloth into datasets/test/cloth/, only if it’s not already there
     cloth_name      = Path(cloth_path).name
     cloth_dest_path = os.path.join(cloth_folder, cloth_name)
-    shutil.copy(cloth_path, cloth_dest_path)
-    print(f"📥 Copied cloth to → {cloth_dest_path}")
+    if os.path.abspath(cloth_path) != os.path.abspath(cloth_dest_path):
+        shutil.copy(cloth_path, cloth_dest_path)
+        print(f"📥 Copied cloth to → {cloth_dest_path}")
+    else:
+        print(f"↩️ Source and destination are the same ({cloth_dest_path}), skipping copy.")
 
     # 5) Generate cloth mask
     cloth_mask_path = os.path.join(cloth_mask_folder, cloth_name)
