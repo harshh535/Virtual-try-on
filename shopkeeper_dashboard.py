@@ -2,7 +2,6 @@ import streamlit as st
 import pyrebase
 import base64
 import os
-import subprocess
 import sys
 import time
 from io import BytesIO
@@ -28,40 +27,23 @@ db = firebase.database()
 
 def run_virtual_tryon(cloth_path):
     """
-    Runs the virtual try-on backend script using the same Python interpreter
-    as Streamlit. Assumes 'automated.py' lives alongside this file.
-    Captures stdout/stderr and displays it in the Streamlit UI.
+    Runs the virtual try-on pipeline by calling `automated.main()` directly
+    instead of spawning a subprocess. Assumes `automated.py` lives alongside this file.
     """
     try:
-        script_path = os.path.join(base_dir, "automated.py")
-        cmd = [
-            sys.executable,
-            script_path,
-            cloth_path
-        ]
-        st.text(f"▶️ Running automated.py with command:\n   {' '.join(cmd)}\n")
-        proc = subprocess.run(
-            cmd,
-            cwd=base_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        if proc.stdout:
-            st.text("=== automated.py STDOUT ===")
-            st.code(proc.stdout)
-        if proc.stderr:
-            st.text("=== automated.py STDERR ===")
-            st.code(proc.stderr)
+        # Import the module containing the in-process pipeline
+        import automated
 
-        if proc.returncode != 0:
-            st.error(f"❌ automated.py failed (exit code {proc.returncode}).")
-            return False
+        st.text(f"▶️ Running automated.main() on cloth_path:\n   {cloth_path}\n")
+        # Call the main() function from automated.py
+        automated.main(cloth_path)
 
-        st.success("✅ automated.py completed successfully.")
+        st.success("✅ Virtual try-on pipeline completed successfully.")
         return True
     except Exception as e:
         st.error(f"⚠️ Error running virtual try-on: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return False
 
 def encode_image(image_path):
@@ -75,8 +57,8 @@ def encode_image(image_path):
 
 def upload_item(shop_no, item_name, item_price, item_desc, uploaded_image):
     """
-    Saves the uploaded cloth image, runs the try-on pipeline, and writes original
-    + overlay results to Firebase under Shops/{shop_no}/items/{item_id}/.
+    Saves the uploaded cloth image, runs the try-on pipeline via `automated.main()`,
+    and writes original + overlay results to Firebase under Shops/{shop_no}/items/{item_id}/.
     """
     if uploaded_image is None:
         st.error("⚠️ Please upload an image first.")
@@ -104,7 +86,7 @@ def upload_item(shop_no, item_name, item_price, item_desc, uploaded_image):
         with open(cloth_path, "wb") as f:
             f.write(image_bytes)
 
-        # 4) Run the try-on pipeline
+        # 4) Run the try-on pipeline in-process
         with st.spinner("🧪 Generating virtual try-ons (this may take a few minutes)..."):
             success = run_virtual_tryon(cloth_path)
 
@@ -141,6 +123,8 @@ def upload_item(shop_no, item_name, item_price, item_desc, uploaded_image):
 
     except Exception as e:
         st.error(f"⚠️ Error uploading item: {e}")
+        import traceback
+        st.error(traceback.format_exc())
 
 def get_shop_items(shop_no):
     """Fetches all items under a shop from Firebase."""
@@ -333,3 +317,4 @@ def show_dashboard():
 # ✅ Run the Dashboard when this script is executed
 if __name__ == "__main__":
     show_dashboard()
+
