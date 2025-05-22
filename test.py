@@ -11,6 +11,8 @@ from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 import torch.multiprocessing
 torch.multiprocessing.set_sharing_strategy('file_system')
+import warnings
+warnings.filterwarnings("ignore", message="Default grid_sample and affine_grid behavior")
 
 # ─── Google Drive IDs ─────────────────────────────────────────────────────────
 SEG_CKPT_ID   = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
