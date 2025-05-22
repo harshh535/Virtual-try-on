@@ -160,8 +160,8 @@ def main(cloth_path):
     # DataLoader-specific
     opt.shuffle     = False
     opt.batch_size  = 1
-    opt.num_workers = 2
-    opt.workers     = 2
+    opt.num_workers = 0
+    opt.workers     = 0
 
     # Ensure output directory exists
     os.makedirs(opt.save_dir, exist_ok=True)
