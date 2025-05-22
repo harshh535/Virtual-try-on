@@ -9,6 +9,8 @@ import gdown
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 # ─── Google Drive IDs ─────────────────────────────────────────────────────────
 SEG_CKPT_ID   = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
