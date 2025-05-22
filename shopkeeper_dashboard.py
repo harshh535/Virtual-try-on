@@ -31,20 +31,17 @@ def run_virtual_tryon(cloth_path):
     instead of spawning a subprocess. Assumes `automated.py` lives alongside this file.
     """
     try:
-        # Import the module containing the in-process pipeline
         import automated
-
-        st.text(f"▶️ Running automated.main() on cloth_path:\n   {cloth_path}\n")
-        # Call the main() function from automated.py
         automated.main(cloth_path)
-
         st.success("✅ Virtual try-on pipeline completed successfully.")
         return True
     except Exception as e:
-        st.error(f"⚠️ Error running virtual try-on: {e}")
         import traceback
+        # Display the error in the Streamlit UI
+        st.error("❌ Exception caught during virtual try-on:")
         st.error(traceback.format_exc())
         return False
+
 
 def encode_image(image_path):
     """Encodes an image file to a Base64 string."""
