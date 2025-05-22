@@ -10,8 +10,6 @@ from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 
-# Add to very top of test.py:
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 # ─── Google Drive IDs ─────────────────────────────────────────────────────────
 SEG_CKPT_ID   = "1Hb_y7M4pQlrKh6m4-2Mo_m_KU1IcT6DB"
 GMM_CKPT_ID   = "1gtagvr1I8Dq4ejnpQ51fZ9G9sCloKgyh"
@@ -35,6 +33,12 @@ def download_if_not_exists(file_id, dest_path):
     print(f"✅ Download complete → {dest_path}")
 
 def get_opt():
+    """
+    Builds an argparse.Namespace containing all options needed by load_models() 
+    and run_inference(). If running from the command line, this will parse CLI 
+    arguments. If imported (e.g. by automated.py), you can override attributes 
+    manually after calling get_opt().
+    """
     parser = argparse.ArgumentParser(description="Test Virtual Try-On")
 
     # ─── Existing arguments ───────────────────────────────────────────────────
@@ -81,7 +85,7 @@ def get_opt():
     parser.add_argument("--display_freq",    type=int, default=1)
     # ──────────────────────────────────────────────────────────────────────────
 
-    # ─── Add these missing arguments ──────────────────────────────────────────
+    # ─── Add DataLoader arguments ─────────────────────────────────────────────
     parser.add_argument(
         "--shuffle",
         action="store_true",
@@ -93,17 +97,18 @@ def get_opt():
         default=1,
         help="batch size for DataLoader (default: 1)"
     )
+    # We recommend num_workers=0 on environments with limited shared memory
     parser.add_argument(
         "--num_workers",
         type=int,
         default=0,
-        help="number of worker threads for DataLoader (default: 4)"
+        help="number of worker threads for DataLoader (default: 0)"
     )
     parser.add_argument(
         "--workers",
         type=int,
         default=0,
-        help="alias for --num_workers; used by VITONDataLoader"
+        help="alias for --num_workers; used by VITONDataLoader (default: 0)"
     )
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -132,11 +137,8 @@ def load_models(opt):
     download_if_not_exists(ALIAS_CKPT_ID, alias_path)
 
     # Construct networks
-    # SegGenerator
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
-    # GMM
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
-    # ALIASGenerator: temporarily set semantic_nc to 7 for alias step
     prev_sem = opt.semantic_nc
     opt.semantic_nc = 7
     alias = ALIASGenerator(opt, input_nc=9)
@@ -179,8 +181,8 @@ def run_inference(opt, seg, gmm, alias):
         print("    " + ln)
 
     # 2) Build dataset & dataloader
-    test_dataset = VITONDataset(opt)                     # uses opt.dataset_dir and opt.dataset_mode
-    test_loader  = VITONDataLoader(opt, test_dataset)    # uses opt.shuffle, opt.batch_size, opt.workers
+    test_dataset = VITONDataset(opt)
+    test_loader  = VITONDataLoader(opt, test_dataset)
 
     print(f"🧪 Loaded {len(test_dataset)} test pairs (dataset length).")
     if len(test_dataset) == 0:
@@ -280,7 +282,7 @@ def run_inference(opt, seg, gmm, alias):
 def main():
     opt = get_opt()
     os.makedirs(opt.save_dir, exist_ok=True)
-    # Ensure both num_workers and workers are set consistently
+    # Make sure both attributes exist
     if not hasattr(opt, 'workers'):
         opt.workers = opt.num_workers
     seg, gmm, alias = load_models(opt)
