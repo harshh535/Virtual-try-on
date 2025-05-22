@@ -34,7 +34,23 @@ def download_if_not_exists(file_id, dest_path):
     print(f"✅ Download complete → {dest_path}")
 
 def get_opt():
-    parser = argparse.ArgumentParser()
+     parser = argparse.ArgumentParser(
+        description="Test Virtual Try-On"
+    )
+    # ─── ADD THESE DEFAULTS ───────────────────────────────────────────────────
+    parser.add_argument(
+        "--init_type",
+        type=str,
+        default="normal",
+        help="network weight initialization (default: normal)"
+    )
+    parser.add_argument(
+        "--init_variance",
+        type=float,
+        default=0.02,
+        help="initialization variance (default: 0.02)"
+    )
+    # ───
     parser.add_argument('--name',       type=str, required=True)
     parser.add_argument('--dataset_dir',type=str, default='./datasets')
     parser.add_argument('--dataset_list',type=str, default='test/test_pairs.txt')
