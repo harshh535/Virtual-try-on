@@ -27,21 +27,62 @@ db = firebase.database()
 
 def run_virtual_tryon(cloth_path):
     """
-    Runs the virtual try-on pipeline by calling `automated.main()` directly
-    instead of spawning a subprocess. Assumes `automated.py` lives alongside this file.
+    Runs the virtual try-on pipeline directly with CPU optimization and memory management.
+    Handles PyTorch warnings and Streamlit UI updates appropriately.
     """
     try:
-        import automated
-        automated.main(cloth_path)
+        import gc
+        import torch
+        import warnings
+        import automated  # Assuming automated.py is in the same directory
+        
+        # Configure environment for CPU-only operation
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+        os.environ["OPENCV_OPENCL_RUNTIME"] = "0"
+        torch.backends.cudnn.enabled = False
+        
+        # Suppress specific PyTorch warnings
+        warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.functional")
+        warnings.filterwarnings("ignore", message="Default grid_sample")
+        warnings.filterwarnings("ignore", message="affine_grid")
+
+        # Memory cleanup before execution
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # Run pipeline with progress indication
+        with st.spinner("🚀 Running virtual try-on (CPU mode)..."):
+            automated.main(cloth_path)
+            
+        # Post-execution cleanup
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         st.success("✅ Virtual try-on pipeline completed successfully.")
         return True
+        
     except Exception as e:
         import traceback
-        # Display the error in the Streamlit UI
-        st.error("❌ Exception caught during virtual try-on:")
-        st.error(traceback.format_exc())
+        # Enhanced error reporting
+        error_msg = f"""
+        ❌ Virtual try-on failed: {str(e)}
+        
+        Common solutions:
+        1. Try a smaller image (under 1MB)
+        2. Ensure white background for best results
+        3. Check available memory
+        """
+        st.error(error_msg)
+        st.code(traceback.format_exc(), language='bash')
+        
+        # Critical memory cleanup on failure
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
         return False
-
 
 def encode_image(image_path):
     """Encodes an image file to a Base64 string."""
