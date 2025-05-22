@@ -1,14 +1,14 @@
 import os
-import sys
-import argparse
 import shutil
 import cv2
 import numpy as np
 from pathlib import Path
 import json
+import argparse
 
-# Instead of calling test.py via subprocess, we will import and invoke its logic directly:
-import test
+# Instead of relying on test.get_opt(), we’ll build our own Namespace
+import types
+import test  # Import the revised `test.py` module
 
 def generate_cloth_mask(input_path, output_path):
     """
@@ -72,14 +72,14 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
 
 def main(cloth_path):
     """
-    Replaces the old subprocess approach with direct function calls.
+    Replaces subprocess invocation with direct function calls to test.py.
     Steps:
       1) Create/verify directories.
       2) Clear any previous results.
       3) Copy the uploaded cloth image into datasets/test/cloth.
       4) Generate its mask under datasets/test/cloth-mask.
-      5) Update test_pairs.txt so every model‐image is paired with this cloth.
-      6) Directly call test.load_models(...) and test.run_inference(...) instead of `subprocess.run(["python", "test.py", ...])`.
+      5) Update test_pairs.txt.
+      6) Build a Namespace 'opt' and call test.load_models(opt), test.run_inference(opt, ...).
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     print("STEP 1: Starting automated pipeline")
@@ -138,12 +138,13 @@ def main(cloth_path):
         for line in f:
             print("   " + line.strip())
 
-    # 9) Instead of subprocess.run, directly invoke `test.py` logic:
+    # 9) Build a fresh `opt` namespace—no CLI parsing!
     print("STEP 9: Running inference via direct function calls")
-    # Build an `opt` object analogous to `test.get_opt()` defaults:
-    opt = test.get_opt()
 
-    # Override CLI‐parsed values with the ones this pipeline needs:
+    # Create an empty Namespace and manually set attributes:
+    opt = types.SimpleNamespace()
+
+    # Required by load_models() and run_inference():
     opt.name           = "virtual_tryon"
     opt.dataset_dir    = "datasets"
     opt.dataset_mode   = "test"
@@ -158,13 +159,16 @@ def main(cloth_path):
     opt.ngf            = 64
     opt.num_upsampling_layers = "most"
     opt.display_freq   = 1
-    opt.shuffle        = False
-    opt.batch_size     = 1
-    opt.num_workers    = 0
-    opt.workers        = 0
+
+    # DataLoader arguments:
+    opt.shuffle     = False
+    opt.batch_size  = 1
+    opt.num_workers = 0
+    opt.workers     = 0
 
     # Ensure output directory exists
     os.makedirs(opt.save_dir, exist_ok=True)
+
     # Load models & run inference
     try:
         seg, gmm, alias = test.load_models(opt)
@@ -175,7 +179,7 @@ def main(cloth_path):
         import traceback
         traceback.print_exc()
 
-    # 10) (Optional) List whatever ended up in results/
+    # 10) Finally, list the files in `results/`:
     print("STEP 10: Verifying results/")
     saved = []
     for fname in os.listdir(results_folder):
