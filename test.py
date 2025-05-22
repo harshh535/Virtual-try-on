@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchgeometry as tgm
 import gdown
-from types import SimpleNamespace
 
 from datasets import VITONDataset, VITONDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
@@ -33,85 +32,85 @@ def download_if_not_exists(file_id, dest_path):
     gdown.download(url, dest_path, quiet=False)
     print(f"✅ Download complete → {dest_path}")
 
- def get_opt():
-     parser = argparse.ArgumentParser(description="Test Virtual Try-On")
-     # ─── Existing arguments ───────────────────────────────────────────────────
-     parser.add_argument(
-         "--init_type",
-         type=str,
-         default="normal",
-         help="network weight initialization (default: normal)"
-     )
-     parser.add_argument(
-         "--init_variance",
-         type=float,
-         default=0.02,
-         help="initialization variance (default: 0.02)"
-     )
-     parser.add_argument("--name",            type=str, required=True)
-     parser.add_argument("--dataset_dir",     type=str, default="./datasets")
-     parser.add_argument(
-         "--dataset_mode",
-         type=str,
-         default="test",
-         help="which subfolder under dataset_dir to use"
-     )
-     parser.add_argument(
-         "--dataset_list",
-         type=str,
-         default="test/test_pairs.txt",
-         help="relative path (inside dataset_dir) listing cloth-model pairs"
-     )
-     parser.add_argument("--save_dir",        type=str, default="./results")
-     parser.add_argument("--checkpoint_dir",  type=str, default="./checkpoints")
-     parser.add_argument("--load_height",     type=int, default=1024)
-     parser.add_argument("--load_width",      type=int, default=768)
-     parser.add_argument("--semantic_nc",     type=int, default=13)
-     parser.add_argument("--grid_size",       type=int, default=5)
-     parser.add_argument("--norm_G",          type=str, default="spectralaliasinstance")
-     parser.add_argument("--ngf",             type=int, default=64)
-     parser.add_argument(
-         "--num_upsampling_layers",
-         choices=["normal", "more", "most"],
-         default="most",
-         help="how many upsampling layers in the network"
-     )
-     parser.add_argument("--display_freq",    type=int, default=1)
-     # ──────────────────────────────────────────────────────────────────────────
+def get_opt():
+    parser = argparse.ArgumentParser(description="Test Virtual Try-On")
 
-     # ─── Add these missing arguments ──────────────────────────────────────────
-     parser.add_argument(
-         "--shuffle",
-         action="store_true",
-         help="whether to shuffle the dataset (default: False)"
-     )
-     parser.add_argument(
-         "--batch_size",
-         type=int,
-         default=1,
-         help="batch size for DataLoader (default: 1)"
-     )
-     parser.add_argument(
-         "--num_workers",
-         type=int,
-         default=4,
-         help="number of worker threads for DataLoader (default: 4)"
-     )
-+    parser.add_argument(
-+        "--workers",
-+        type=int,
-+        default=4,
-+        help="alias for --num_workers; used by VITONDataLoader"
-+    )
-     # ──────────────────────────────────────────────────────────────────────────
+    # ─── Existing arguments ───────────────────────────────────────────────────
+    parser.add_argument(
+        "--init_type",
+        type=str,
+        default="normal",
+        help="network weight initialization (default: normal)"
+    )
+    parser.add_argument(
+        "--init_variance",
+        type=float,
+        default=0.02,
+        help="initialization variance (default: 0.02)"
+    )
+    parser.add_argument("--name",            type=str, required=True)
+    parser.add_argument("--dataset_dir",     type=str, default="./datasets")
+    parser.add_argument(
+        "--dataset_mode",
+        type=str,
+        default="test",
+        help="which subfolder under dataset_dir to use"
+    )
+    parser.add_argument(
+        "--dataset_list",
+        type=str,
+        default="test/test_pairs.txt",
+        help="relative path (inside dataset_dir) listing cloth-model pairs"
+    )
+    parser.add_argument("--save_dir",        type=str, default="./results")
+    parser.add_argument("--checkpoint_dir",  type=str, default="./checkpoints")
+    parser.add_argument("--load_height",     type=int, default=1024)
+    parser.add_argument("--load_width",      type=int, default=768)
+    parser.add_argument("--semantic_nc",     type=int, default=13)
+    parser.add_argument("--grid_size",       type=int, default=5)
+    parser.add_argument("--norm_G",          type=str, default="spectralaliasinstance")
+    parser.add_argument("--ngf",             type=int, default=64)
+    parser.add_argument(
+        "--num_upsampling_layers",
+        choices=["normal", "more", "most"],
+        default="most",
+        help="how many upsampling layers in the network"
+    )
+    parser.add_argument("--display_freq",    type=int, default=1)
+    # ──────────────────────────────────────────────────────────────────────────
 
-     return parser.parse_args()
+    # ─── Add these missing arguments ──────────────────────────────────────────
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="whether to shuffle the dataset (default: False)"
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=1,
+        help="batch size for DataLoader (default: 1)"
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        help="number of worker threads for DataLoader (default: 4)"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="alias for --num_workers; used by VITONDataLoader"
+    )
+    # ──────────────────────────────────────────────────────────────────────────
 
+    return parser.parse_args()
 
 def load_models(opt):
     """
-    1. Ensures each checkpoint (SEG, GMM, ALIAS) is present (download if needed).  
-    2. Constructs SegGenerator, GMM, ALIASGenerator.  
+    1. Ensures each checkpoint (SEG, GMM, ALIAS) is present (download if needed).
+    2. Constructs SegGenerator, GMM, ALIASGenerator.
     3. Loads their .pth weights, sets `.eval()`, and returns them.
     """
     os.makedirs(opt.checkpoint_dir, exist_ok=True)
@@ -130,16 +129,18 @@ def load_models(opt):
     print(f"🔍 Looking for ALIAS checkpoint at: {alias_path}")
     download_if_not_exists(ALIAS_CKPT_ID, alias_path)
 
-    # Build a tiny SimpleNamespace holding config
-    opt.semantic_nc = 13
+    # Construct networks
+    # SegGenerator
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
+    # GMM
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
-
+    # ALIASGenerator: temporarily set semantic_nc to 7 for alias step
     prev_sem = opt.semantic_nc
     opt.semantic_nc = 7
     alias = ALIASGenerator(opt, input_nc=9)
-    opt.semantic_nc = prev_sem  # restore
+    opt.semantic_nc = prev_sem
 
+    # Load weights
     print("⚙️ Loading SEG weights...")
     load_checkpoint(seg, seg_path)
     print("⚙️ Loading GMM weights...")
@@ -155,10 +156,10 @@ def load_models(opt):
 
 def run_inference(opt, seg, gmm, alias):
     """
-    1️⃣ Reads and prints `test_pairs.txt`.  
-    2️⃣ Builds `VITONDataset` & `VITONDataLoader`.  
-    3️⃣ For each batch: predicts segmentation → warps cloth → aliases final.  
-    4️⃣ Saves each output under `opt.save_dir/{modelName}_{clothName}.jpg`  
+    1️⃣ Reads and prints `test_pairs.txt`.
+    2️⃣ Builds `VITONDataset` & `VITONDataLoader`.
+    3️⃣ For each batch: predicts segmentation → warps cloth → aliases final.
+    4️⃣ Saves each output under `opt.save_dir/{modelName}_{clothName}.jpg`
     5️⃣ Prints debugging info at every major step.
     """
     up    = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
@@ -176,8 +177,8 @@ def run_inference(opt, seg, gmm, alias):
         print("    " + ln)
 
     # 2) Build dataset & dataloader
-    test_dataset = VITONDataset(opt)
-    test_loader  = VITONDataLoader(opt, test_dataset)
+    test_dataset = VITONDataset(opt)                     # uses opt.dataset_dir and opt.dataset_mode
+    test_loader  = VITONDataLoader(opt, test_dataset)    # uses opt.shuffle, opt.batch_size, opt.workers
 
     print(f"🧪 Loaded {len(test_dataset)} test pairs (dataset length).")
     if len(test_dataset) == 0:
@@ -187,38 +188,44 @@ def run_inference(opt, seg, gmm, alias):
     total_saved = 0
     with torch.no_grad():
         for i, inputs in enumerate(test_loader.data_loader):
-            img_names   = inputs['img_name']
-            c_names     = inputs['c_name']['unpaired']
+            img_names      = inputs['img_name']
+            c_names        = inputs['c_name']['unpaired']
             img_agnostic   = inputs['img_agnostic']
             parse_agnostic = inputs['parse_agnostic']
             pose           = inputs['pose']
             c              = inputs['cloth']['unpaired']
             cm             = inputs['cloth_mask']['unpaired']
 
-            print(f"\n🌀 Processing batch {i+1} / {len(test_loader)}")
-            print(f"   • img_names = {img_names}")
-            print(f"   • cloth_names = {c_names}")
+            print(f"\n🌀 Processing batch {i+1} / {len(test_loader.data_loader)}")
+            print(f"   • img_names    = {img_names}")
+            print(f"   • cloth_names  = {c_names}")
 
             # ─ Part 1: Segmentation prediction ─────────────────────────
             seg_input = torch.cat([
-                F.interpolate(cm,           (256,192), mode='bilinear'),
-                F.interpolate(c * cm,       (256,192), mode='bilinear'),
-                F.interpolate(parse_agnostic,(256,192), mode='bilinear'),
-                F.interpolate(pose,         (256,192), mode='bilinear'),
-                gen_noise((c.size(0),1,256,192))
+                F.interpolate(cm,            (256, 192), mode='bilinear'),
+                F.interpolate(c * cm,        (256, 192), mode='bilinear'),
+                F.interpolate(parse_agnostic,(256, 192), mode='bilinear'),
+                F.interpolate(pose,          (256, 192), mode='bilinear'),
+                gen_noise((c.size(0), 1, 256, 192))
             ], dim=1)
 
             parse_pred_down = seg(seg_input)
             parse_pred      = gauss(up(parse_pred_down)).argmax(dim=1)[:, None]
 
             # Convert to 13-channel one-hot
-            parse_old = torch.zeros(parse_pred.size(0), opt.semantic_nc, opt.load_height, opt.load_width).to(parse_pred.device)
+            parse_old = torch.zeros(
+                parse_pred.size(0), opt.semantic_nc,
+                opt.load_height, opt.load_width
+            ).to(parse_pred.device)
             parse_old.scatter_(1, parse_pred, 1.0)
 
             # Combine into 7 semantic channels
-            parse = torch.zeros(parse_pred.size(0), 7, opt.load_height, opt.load_width).to(parse_pred.device)
+            parse = torch.zeros(
+                parse_pred.size(0), 7,
+                opt.load_height, opt.load_width
+            ).to(parse_pred.device)
             parse[:, 0] = parse_old[:, 0]
-            parse[:, 1] = parse_old[:, [2,4,7,8,9,10,11]].sum(dim=1)
+            parse[:, 1] = parse_old[:, [2, 4, 7, 8, 9, 10, 11]].sum(dim=1)
             parse[:, 2] = parse_old[:, 3]
             parse[:, 3] = parse_old[:, 1]
             parse[:, 4] = parse_old[:, 5]
@@ -226,10 +233,10 @@ def run_inference(opt, seg, gmm, alias):
             parse[:, 6] = parse_old[:, 12]
 
             # ─ Part 2: GMM warping ────────────────────────────────────
-            agnostic_gmm     = F.interpolate(img_agnostic, (256,192), mode='nearest')
-            parse_cloth_gmm  = F.interpolate(parse[:, 2:3], (256,192), mode='nearest')
-            pose_gmm         = F.interpolate(pose, (256,192), mode='nearest')
-            c_gmm            = F.interpolate(c, (256,192), mode='nearest')
+            agnostic_gmm     = F.interpolate(img_agnostic, (256, 192), mode='nearest')
+            parse_cloth_gmm  = F.interpolate(parse[:, 2:3], (256, 192), mode='nearest')
+            pose_gmm         = F.interpolate(pose, (256, 192), mode='nearest')
+            c_gmm            = F.interpolate(c, (256, 192), mode='nearest')
             gmm_input        = torch.cat([parse_cloth_gmm, pose_gmm, agnostic_gmm], dim=1)
 
             _, warped_grid = gmm(gmm_input, c_gmm)
@@ -262,12 +269,18 @@ def run_inference(opt, seg, gmm, alias):
 
     # 4) Final tally
     print(f"\n🎉 Inference complete! Total images saved: {total_saved}")
-    existing = [f for f in os.listdir(opt.save_dir) if f.lower().endswith((".jpg", ".png"))]
+    existing = [
+        f for f in os.listdir(opt.save_dir)
+        if f.lower().endswith((".jpg", ".png"))
+    ]
     print(f"   • Currently in `{opt.save_dir}` → {existing}\n")
 
 def main():
     opt = get_opt()
     os.makedirs(opt.save_dir, exist_ok=True)
+    # Ensure both num_workers and workers are set consistently
+    if not hasattr(opt, 'workers'):
+        opt.workers = opt.num_workers
     seg, gmm, alias = load_models(opt)
     run_inference(opt, seg, gmm, alias)
 
