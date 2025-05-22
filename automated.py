@@ -5,8 +5,10 @@ import shutil
 import cv2
 import numpy as np
 from pathlib import Path
-import subprocess
 import json
+
+# Instead of calling test.py via subprocess, we will import and invoke its logic directly:
+import test
 
 def generate_cloth_mask(input_path, output_path):
     """
@@ -69,6 +71,16 @@ def update_test_pairs(image_folder, test_pairs_file, cloth_name):
     print(f"✅ test_pairs.txt updated → {test_pairs_file} (paired '{cloth_name}' with {len(model_images)} models)")
 
 def main(cloth_path):
+    """
+    Replaces the old subprocess approach with direct function calls.
+    Steps:
+      1) Create/verify directories.
+      2) Clear any previous results.
+      3) Copy the uploaded cloth image into datasets/test/cloth.
+      4) Generate its mask under datasets/test/cloth-mask.
+      5) Update test_pairs.txt so every model‐image is paired with this cloth.
+      6) Directly call test.load_models(...) and test.run_inference(...) instead of `subprocess.run(["python", "test.py", ...])`.
+    """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     print("STEP 1: Starting automated pipeline")
     print(f"→ Base directory: {base_dir}")
@@ -126,37 +138,44 @@ def main(cloth_path):
         for line in f:
             print("   " + line.strip())
 
-    # 9) Run test.py
-    print("STEP 9: Running test.py inference")
-    test_py_path = os.path.join(base_dir, "test.py")
-    cmd = [
-        sys.executable,
-        test_py_path,
-        "--name", "virtual_tryon",
-        "--dataset_dir", "datasets",
-        "--dataset_list", "test/test_pairs.txt",
-        "--save_dir", "results"
-    ]
-    print("🚀 Executing test.py with:", " ".join(cmd))
+    # 9) Instead of subprocess.run, directly invoke `test.py` logic:
+    print("STEP 9: Running inference via direct function calls")
+    # Build an `opt` object analogous to `test.get_opt()` defaults:
+    opt = test.get_opt()
 
-    proc = subprocess.run(
-        cmd,
-        cwd=base_dir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    if proc.stdout:
-        print(f"--- test.py STDOUT ---\n{proc.stdout}")
-    if proc.stderr:
-        print(f"⚠️ stderr from test.py:\n{proc.stderr}")
+    # Override CLI‐parsed values with the ones this pipeline needs:
+    opt.name           = "virtual_tryon"
+    opt.dataset_dir    = "datasets"
+    opt.dataset_mode   = "test"
+    opt.dataset_list   = "test/test_pairs.txt"
+    opt.save_dir       = "results"
+    opt.checkpoint_dir = "checkpoints"
+    opt.load_height    = 1024
+    opt.load_width     = 768
+    opt.semantic_nc    = 13
+    opt.grid_size      = 5
+    opt.norm_G         = "spectralaliasinstance"
+    opt.ngf            = 64
+    opt.num_upsampling_layers = "most"
+    opt.display_freq   = 1
+    opt.shuffle        = False
+    opt.batch_size     = 1
+    opt.num_workers    = 0
+    opt.workers        = 0
 
-    if proc.returncode != 0:
-        print("❌ test.py failed with exit code", proc.returncode)
-        return
-    print("✅ test.py completed successfully")
+    # Ensure output directory exists
+    os.makedirs(opt.save_dir, exist_ok=True)
+    # Load models & run inference
+    try:
+        seg, gmm, alias = test.load_models(opt)
+        test.run_inference(opt, seg, gmm, alias)
+        print("✅ Inference completed successfully (no subprocess).")
+    except Exception as e:
+        print(f"❌ Inference raised an exception: {e}")
+        import traceback
+        traceback.print_exc()
 
-    # 10) List whatever ended up in results/
+    # 10) (Optional) List whatever ended up in results/
     print("STEP 10: Verifying results/")
     saved = []
     for fname in os.listdir(results_folder):
@@ -173,15 +192,8 @@ def main(cloth_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Automate: generate cloth-mask → update test_pairs.txt → run test.py"
+        description="Automate: generate cloth-mask → update test_pairs.txt → run inference"
     )
-    parser.add_argument(
-        "cloth_path",
-        type=str,
-        help="Local path to the cloth image (e.g. `/mnt/data/cloth123.jpg`)."
-    )
-    args = parser.parse_args()
-    main(args.cloth_path)
     parser.add_argument(
         "cloth_path",
         type=str,
