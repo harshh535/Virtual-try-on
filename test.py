@@ -23,28 +23,25 @@ def download_if_not_exists(file_id, dest_path):
     If checkpoint `dest_path` is missing, download from Google Drive.
     Otherwise, report that it’s already there.
     """
-    print("▶️ Entered download_if_not_exists()")
-    print(f"   • Checking {dest_path}")
+    print("▶️ [download_if_not_exists] Checking for checkpoint:", dest_path)
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     if os.path.exists(dest_path):
-        print(f"   ☑️ Checkpoint already exists → {dest_path}")
+        print("   ☑️  Already exists:", dest_path)
         return
     url = f"https://drive.google.com/uc?id={file_id}"
-    print(f"   ⬇️ Downloading {os.path.basename(dest_path)} from Google Drive...")
+    print("   ⬇️  Downloading", os.path.basename(dest_path), "from Google Drive...")
     gdown.download(url, dest_path, quiet=False)
-    print(f"   ✅ Download complete → {dest_path}")
+    print("   ✅  Download complete →", dest_path)
 
 def get_opt():
     """
-    Builds an argparse.Namespace containing all options needed by load_models() 
-    and run_inference().  
-    When invoked as a script, this parses CLI arguments; when imported, you may 
-    override attributes manually.
+    Builds an argparse.Namespace containing all options needed by load_models()
+    and run_inference().
     """
-    print("▶️ Entered get_opt()")
+    print("▶️ [get_opt] Parsing CLI arguments")
     parser = argparse.ArgumentParser(description="Test Virtual Try-On")
 
-    # ─── Existing arguments ───────────────────────────────────────────────────
+    # ─── Model / network initialization arguments ──────────────────────────────
     parser.add_argument(
         "--init_type",
         type=str,
@@ -88,7 +85,7 @@ def get_opt():
     parser.add_argument("--display_freq",    type=int, default=1)
     # ──────────────────────────────────────────────────────────────────────────
 
-    # ─── Add DataLoader arguments ─────────────────────────────────────────────
+    # ─── DataLoader arguments ─────────────────────────────────────────────────
     parser.add_argument(
         "--shuffle",
         action="store_true",
@@ -115,8 +112,7 @@ def get_opt():
     # ──────────────────────────────────────────────────────────────────────────
 
     args = parser.parse_args()
-    print("▶️ Completed get_opt(), parsed arguments:")
-    print(args)
+    print("▶️ [get_opt] Parsed arguments:", args)
     return args
 
 def load_models(opt):
@@ -125,9 +121,7 @@ def load_models(opt):
     2. Constructs SegGenerator, GMM, ALIASGenerator.
     3. Loads their .pth weights, sets `.eval()`, and returns them.
     """
-    print("▶️ Entered load_models()")
-    print(f"   • checkpoint_dir = {opt.checkpoint_dir}")
-    print(f"   • save_dir       = {opt.save_dir}")
+    print("▶️ [load_models] Creating directories:", opt.checkpoint_dir, "/", opt.save_dir)
     os.makedirs(opt.checkpoint_dir, exist_ok=True)
     os.makedirs(opt.save_dir, exist_ok=True)
 
@@ -135,42 +129,46 @@ def load_models(opt):
     gmm_path   = os.path.join(opt.checkpoint_dir, "gmm_final.pth")
     alias_path = os.path.join(opt.checkpoint_dir, "alias_final.pth")
 
-    print(f"   🔍 Looking for SEG checkpoint at: {seg_path}")
+    print("▶️ [load_models] Looking for SEG checkpoint at:", seg_path)
     download_if_not_exists(SEG_CKPT_ID, seg_path)
 
-    print(f"   🔍 Looking for GMM checkpoint at: {gmm_path}")
+    print("▶️ [load_models] Looking for GMM checkpoint at:", gmm_path)
     download_if_not_exists(GMM_CKPT_ID, gmm_path)
 
-    print(f"   🔍 Looking for ALIAS checkpoint at: {alias_path}")
+    print("▶️ [load_models] Looking for ALIAS checkpoint at:", alias_path)
     download_if_not_exists(ALIAS_CKPT_ID, alias_path)
 
     # Construct networks
-    print("   ▶️ Constructing SegGenerator")
+    print("▶️ [load_models] Constructing SegGenerator")
     seg = SegGenerator(opt, input_nc=opt.semantic_nc + 8, output_nc=opt.semantic_nc)
-    print("   ▶️ Constructing GMM")
+
+    print("▶️ [load_models] Constructing GMM")
     gmm = GMM(opt, inputA_nc=7, inputB_nc=3)
+
     prev_sem = opt.semantic_nc
     opt.semantic_nc = 7
-    print("   ▶️ Constructing ALIASGenerator")
+    print("▶️ [load_models] Constructing ALIASGenerator")
     alias = ALIASGenerator(opt, input_nc=9)
     opt.semantic_nc = prev_sem
 
     # Load weights
-    print("   ⚙️ Loading SEG weights...")
+    print("▶️ [load_models] Loading SEG weights...")
     load_checkpoint(seg, seg_path)
-    print("   ⚙️ SEG weights loaded.")
-    print("   ⚙️ Loading GMM weights...")
+    print("   ☑️  SEG weights loaded.")
+
+    print("▶️ [load_models] Loading GMM weights...")
     load_checkpoint(gmm, gmm_path)
-    print("   ⚙️ GMM weights loaded.")
-    print("   ⚙️ Loading ALIAS weights...")
+    print("   ☑️  GMM weights loaded.")
+
+    print("▶️ [load_models] Loading ALIAS weights...")
     load_checkpoint(alias, alias_path)
-    print("   ⚙️ ALIAS weights loaded.")
+    print("   ☑️  ALIAS weights loaded.")
 
     seg.eval()
     gmm.eval()
     alias.eval()
 
-    print("▶️ Exiting load_models(), returning models.")
+    print("▶️ [load_models] Networks ready. Returning `seg`, `gmm`, `alias`.")
     return seg, gmm, alias
 
 def run_inference(opt, seg, gmm, alias):
@@ -181,18 +179,17 @@ def run_inference(opt, seg, gmm, alias):
     4️⃣ Saves each output under `opt.save_dir/{modelName}_{clothName}.jpg`
     5️⃣ Prints debugging info at every major step.
     """
-    print("▶️ Entered run_inference()")
-    print(f"   • dataset_dir    = {opt.dataset_dir}")
-    print(f"   • dataset_list   = {opt.dataset_list}")
-    print(f"   • save_dir       = {opt.save_dir}")
-    print(f"   • load_height    = {opt.load_height}, load_width = {opt.load_width}")
+
+    # ─── Fix shared‐memory issue by using file_system strategy ──────────────────
+    import torch.multiprocessing as mp
+    mp.set_sharing_strategy('file_system')
+    print("▶️ [run_inference] Set multiprocessing sharing strategy to 'file_system'")
 
     up    = nn.Upsample(size=(opt.load_height, opt.load_width), mode='bilinear')
     gauss = tgm.image.GaussianBlur((15, 15), (3, 3))
 
-    # 1) Debug: show test_pairs.txt content
+    print("▶️ [run_inference] Reading test-pairs from:", os.path.join(opt.dataset_dir, opt.dataset_list))
     pairs_path = os.path.join(opt.dataset_dir, opt.dataset_list)
-    print(f"   📄 Reading test-pairs file → {pairs_path}")
     if not os.path.exists(pairs_path):
         raise FileNotFoundError(f"❌ Cannot find {pairs_path}")
     with open(pairs_path, "r") as f:
@@ -201,24 +198,23 @@ def run_inference(opt, seg, gmm, alias):
     for ln in lines:
         print(f"      {ln}")
 
-    # 2) Build dataset & dataloader
-    print("   ▶️ Constructing VITONDataset")
+    print("▶️ [run_inference] Building VITONDataset")
     test_dataset = VITONDataset(opt)
     print(f"   ▶️ Dataset length = {len(test_dataset)}")
 
-    print("   ▶️ Constructing VITONDataLoader")
+    print("▶️ [run_inference] Building VITONDataLoader with num_workers =", opt.num_workers)
     test_loader  = VITONDataLoader(opt, test_dataset)
-    print(f"   ▶️ DataLoader length (batches) = {len(test_loader.data_loader)}")
+    loader_len = len(test_loader.data_loader)
+    print(f"   ▶️ DataLoader length (batches) = {loader_len}")
 
     if len(test_dataset) == 0:
         raise ValueError("⚠️ No test pairs found! Exiting inference.")
 
-    # 3) Iterate over each pair
+    print("▶️ [run_inference] Starting batch loop")
     total_saved = 0
-    print("   ▶️ Beginning batch loop")
     with torch.no_grad():
         for i, inputs in enumerate(test_loader.data_loader):
-            print(f"\n   🌀 Processing batch {i+1} / {len(test_loader.data_loader)}")
+            print(f"\n   🌀 [Batch {i+1}/{loader_len}]")
             img_names      = inputs['img_name']
             c_names        = inputs['c_name']['unpaired']
             img_agnostic   = inputs['img_agnostic']
@@ -230,7 +226,7 @@ def run_inference(opt, seg, gmm, alias):
             print(f"      • img_names    = {img_names}")
             print(f"      • cloth_names  = {c_names}")
 
-            # ─ Part 1: Segmentation prediction ─────────────────────────
+            # ── Part 1: Segmentation prediction ───────────────────────────────
             print("      ▶️ Building segmentation input")
             seg_input = torch.cat([
                 F.interpolate(cm,            (256, 192), mode='bilinear'),
@@ -265,7 +261,7 @@ def run_inference(opt, seg, gmm, alias):
             parse[:, 5] = parse_old[:, 6]
             parse[:, 6] = parse_old[:, 12]
 
-            # ─ Part 2: GMM warping ────────────────────────────────────
+            # ── Part 2: GMM warping ─────────────────────────────────────────
             print("      ▶️ Preparing inputs for GMM")
             agnostic_gmm     = F.interpolate(img_agnostic, (256, 192), mode='nearest')
             parse_cloth_gmm  = F.interpolate(parse[:, 2:3], (256, 192), mode='nearest')
@@ -278,7 +274,7 @@ def run_inference(opt, seg, gmm, alias):
             warped_c       = F.grid_sample(c, warped_grid, padding_mode='border')
             warped_cm      = F.grid_sample(cm, warped_grid, padding_mode='border')
 
-            # ─ Part 3: ALIAS final synthesis ─────────────────────────
+            # ── Part 3: ALIAS final synthesis ───────────────────────────────
             print("      ▶️ Preparing inputs for ALIAS")
             misalign_mask = parse[:, 2:3] - warped_cm
             misalign_mask = torch.clamp(misalign_mask, min=0.0)
@@ -310,7 +306,7 @@ def run_inference(opt, seg, gmm, alias):
         f for f in os.listdir(opt.save_dir)
         if f.lower().endswith((".jpg", ".png"))
     ]
-    print(f"   • Currently in `{opt.save_dir}` → {existing}\n")
+    print("   • Currently in `", opt.save_dir, "` →", existing)
     print("▶️ Exiting run_inference()")
 
 def main():
@@ -320,11 +316,11 @@ def main():
 
     # Ensure save_dir exists
     os.makedirs(opt.save_dir, exist_ok=True)
-    print(f"   • Created save_dir: {opt.save_dir}")
+    print("   • Created save_dir:", opt.save_dir)
 
     if not hasattr(opt, 'workers'):
         opt.workers = opt.num_workers
-        print("   • Set opt.workers = opt.num_workers")
+        print("   • Set opt.workers = opt.num_workers =", opt.workers)
 
     print("▶️ Calling load_models()")
     seg, gmm, alias = load_models(opt)
