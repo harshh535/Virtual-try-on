@@ -17,7 +17,7 @@ firebase_config = {
     "appId": "1:48604679015:web:f0065e957c1b50eb563dc2",
     "measurementId": "G-HMDVX52K6Q"
 }
-
+base_dir = os.getcwd() 
 # ✅ Initialize Firebase
 firebase = pyrebase.initialize_app(firebase_config)
 db = firebase.database()
@@ -26,7 +26,12 @@ def run_virtual_tryon(cloth_path):
     """Runs the virtual try-on backend script."""
     try:
         venv_python = r"C:/Users/MSI/Desktop/clothes wala/Virtual-Try-On/venv/Scripts/python.exe"
-        subprocess.run(["automated.py", cloth_path])
+        cmd = [
+    sys.executable,
+    os.path.join(base_dir, "automated.py"),
+    cloth_path
+]
+        subprocess.run(cmd, check=True)
         return True
     except Exception as e:
         st.error(f"⚠️ Error running virtual try-on: {e}")
