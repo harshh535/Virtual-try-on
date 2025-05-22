@@ -182,3 +182,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     main(args.cloth_path)
+    parser.add_argument(
+        "cloth_path",
+        type=str,
+        help="Local path to the cloth image (e.g. `/mnt/data/cloth123.jpg`)."
+    )
+    args = parser.parse_args()
+    main(args.cloth_path)
